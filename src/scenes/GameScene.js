@@ -94,7 +94,7 @@ export default class GameScene extends Phaser.Scene {
       // Check if tapped the house plot (for building)
       if (this.housePlotChosen && this.housePlot && this.buildingManager && !this.buildingManager.isComplete()) {
         const distToHouse = Phaser.Math.Distance.Between(worldX, worldY, this.housePlotPosition.x, this.housePlotPosition.y);
-        if (distToHouse < 60) {
+        if (distToHouse < 100) {
           const distPlayer = Phaser.Math.Distance.Between(
             this.player.x, this.player.y, this.housePlotPosition.x, this.housePlotPosition.y
           );
@@ -440,14 +440,17 @@ export default class GameScene extends Phaser.Scene {
     this.housePlotChosen = true;
     this.housePlotPosition = { x: clearing.cx, y: clearing.cy };
 
+    // House scale: ~half the clearing size (clearing is ~384x320px, house base is 48x48)
+    this.houseScale = 3.5;
+
     this.housePlot = this.add.image(clearing.cx, clearing.cy, 'house-stage-0');
     this.housePlot.setDepth(clearing.cy - 24);
 
     this.housePlot.setScale(0);
     this.tweens.add({
       targets: this.housePlot,
-      scaleX: 1,
-      scaleY: 1,
+      scaleX: this.houseScale,
+      scaleY: this.houseScale,
       duration: 400,
       ease: 'Back.easeOut',
     });
@@ -490,13 +493,17 @@ export default class GameScene extends Phaser.Scene {
     if (newStage === -1) return;
 
     // Bounce tween on house sprite
+    const s = this.houseScale || 3.5;
     this.tweens.add({
       targets: this.housePlot,
-      scaleX: 1.2,
-      scaleY: 1.2,
+      scaleX: s * 1.15,
+      scaleY: s * 1.15,
       duration: 150,
       yoyo: true,
       ease: 'Sine.easeInOut',
+      onComplete: () => {
+        this.housePlot.setScale(s);
+      },
     });
 
     // Update depth for new sprite size
