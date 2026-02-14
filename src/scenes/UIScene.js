@@ -69,7 +69,21 @@ export default class UIScene extends Phaser.Scene {
     EventBus.on('inventory-changed', this.onInventoryChanged, this);
     EventBus.on('slot-selected', this.onSlotSelected, this);
 
+    this.lastSlotTap = { index: -1, time: 0 };
+
     EventBus.on('ui-slot-tap', (index) => {
+      const now = Date.now();
+      const DOUBLE_TAP_MS = 400;
+
+      if (this.lastSlotTap.index === index && now - this.lastSlotTap.time < DOUBLE_TAP_MS) {
+        // Double-tap: drop the item
+        EventBus.emit('drop-item', index);
+        this.lastSlotTap = { index: -1, time: 0 };
+        return;
+      }
+
+      // Single tap: select slot
+      this.lastSlotTap = { index, time: now };
       EventBus.emit('select-slot', index);
     });
 

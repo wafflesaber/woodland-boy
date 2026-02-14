@@ -472,8 +472,9 @@ export default class MapGenerator {
       }
     }
 
-    // Planks: in clearings and near map edges
-    for (const c of clearings) {
+    // Planks: in clearings (skip first — that's the player spawn / house site)
+    for (let ci = 1; ci < clearings.length; ci++) {
+      const c = clearings[ci];
       for (let i = 0; i < 3; i++) {
         points.planks.push({
           x: c.cx + (Math.random() * 80 - 40),
@@ -481,8 +482,8 @@ export default class MapGenerator {
         });
       }
     }
-    // A few more near map edges
-    for (let i = 0; i < 4; i++) {
+    // More near map edges and scattered in the world
+    for (let i = 0; i < 10; i++) {
       const edge = Math.floor(Math.random() * 4);
       let wx, wy;
       if (edge === 0) { wx = 80 + Math.random() * 200; wy = Math.random() * WORLD_HEIGHT; }
@@ -491,23 +492,37 @@ export default class MapGenerator {
       else { wx = Math.random() * WORLD_WIDTH; wy = WORLD_HEIGHT - 80 - Math.random() * 200; }
       points.planks.push({ x: wx, y: wy });
     }
+    // Scattered in woodland
+    for (let i = 0; i < 6; i++) {
+      points.planks.push({
+        x: 150 + Math.random() * (WORLD_WIDTH - 300),
+        y: 150 + Math.random() * (WORLD_HEIGHT - 300),
+      });
+    }
 
-    // Stones: near rock clusters
+    // Stones: near rock clusters + scattered
     for (const r of rockPositions) {
       points.stones.push({
         x: r.x + (Math.random() * 40 - 20),
         y: r.y + (Math.random() * 40 - 20),
       });
     }
+    for (let i = 0; i < 8; i++) {
+      points.stones.push({
+        x: 120 + Math.random() * (WORLD_WIDTH - 240),
+        y: 120 + Math.random() * (WORLD_HEIGHT - 240),
+      });
+    }
 
-    // Straw: in clearings and random grassy areas
-    for (const c of clearings) {
+    // Straw: in clearings (skip first — player spawn / house site) and random grassy areas
+    for (let ci = 1; ci < clearings.length; ci++) {
+      const c = clearings[ci];
       points.straw.push({
         x: c.cx + (Math.random() * 60 - 30),
         y: c.cy + (Math.random() * 60 - 30),
       });
     }
-    for (let i = 0; i < 8; i++) {
+    for (let i = 0; i < 12; i++) {
       points.straw.push({
         x: 100 + Math.random() * (WORLD_WIDTH - 200),
         y: 100 + Math.random() * (WORLD_HEIGHT - 200),

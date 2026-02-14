@@ -24,13 +24,13 @@ export const BUILDING_STAGES = [
 ];
 
 export const ITEM_SPAWN_COUNTS = {
-  berries: 8,
-  mushrooms: 6,
-  acorns: 6,
-  fish: 6,
-  planks: 8,
-  stones: 6,
-  straw: 6,
+  berries: 10,
+  mushrooms: 8,
+  acorns: 8,
+  fish: 8,
+  planks: 16,
+  stones: 14,
+  straw: 12,
 };
 
 export const INVENTORY_SIZE = 6;

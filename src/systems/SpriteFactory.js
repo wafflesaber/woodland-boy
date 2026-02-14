@@ -633,7 +633,11 @@ export default class SpriteFactory {
     const Wb = '#87CEEB'; // window blue
     const Fl = '#FF6B6B'; // flower
 
-    // Stage 0: empty plot
+    // Stage 0: empty plot — outlined dirt pad with corner stakes and a hammer icon
+    const Bk = '#333333'; // black outline
+    const St = '#8B7355'; // stake / post
+    const Hm = '#888888'; // hammer head
+    const Hh = '#A0714A'; // hammer handle
     this.tex('house-stage-0', [
       [_, _, _, _, _, _, _, _, _, _, _, _],
       [_, _, _, _, _, _, _, _, _, _, _, _],
@@ -641,15 +645,17 @@ export default class SpriteFactory {
       [_, _, _, _, _, _, _, _, _, _, _, _],
       [_, _, _, _, _, _, _, _, _, _, _, _],
       [_, _, _, _, _, _, _, _, _, _, _, _],
-      [_, _, _, _, _, _, _, _, _, _, _, _],
-      [_, _, _, _, _, _, _, _, _, _, _, _],
-      [_, Dr, Dr, Dr, Dr, Dr, Dr, Dr, Dr, Dr, Dr, _],
-      [_, Dr, Dr, Dr, Dr, Dr, Dr, Dr, Dr, Dr, Dr, _],
-      [_, Dr, Dr, Dr, Dr, Dr, Dr, Dr, Dr, Dr, Dr, _],
-      [_, Dr, Dr, Dr, Dr, Dr, Dr, Dr, Dr, Dr, Dr, _],
+      [_, _, _, _, _, Hm, Hm, _, _, _, _, _],
+      [St, Bk, Bk, Bk, Bk, Hh, Bk, Bk, Bk, Bk, Bk, St],
+      [Bk, Dr, Dr, Dr, Dr, Hh, Dr, Dr, Dr, Dr, Dr, Bk],
+      [Bk, Dr, Dr, Dr, Dr, Dr, Dr, Dr, Dr, Dr, Dr, Bk],
+      [Bk, Dr, Dr, Dr, Dr, Dr, Dr, Dr, Dr, Dr, Dr, Bk],
+      [St, Bk, Bk, Bk, Bk, Bk, Bk, Bk, Bk, Bk, Bk, St],
     ]);
 
-    // Stage 1: floor
+    // Stage 1: floor — warm wood planks with visible board lines and nails
+    const Fg = '#B08050'; // floor grain
+    const Fn = '#5C3A1E'; // nail
     this.tex('house-stage-1', [
       [_, _, _, _, _, _, _, _, _, _, _, _],
       [_, _, _, _, _, _, _, _, _, _, _, _],
@@ -659,10 +665,10 @@ export default class SpriteFactory {
       [_, _, _, _, _, _, _, _, _, _, _, _],
       [_, _, _, _, _, _, _, _, _, _, _, _],
       [_, _, _, _, _, _, _, _, _, _, _, _],
-      [_, Pw, Pl, Pw, Pl, Pw, Pl, Pw, Pl, Pw, Pl, _],
-      [_, Pl, Pw, Pl, Pw, Pl, Pw, Pl, Pw, Pl, Pw, _],
-      [_, Pw, Pl, Pw, Pl, Pw, Pl, Pw, Pl, Pw, Pl, _],
-      [_, Pl, Pw, Pl, Pw, Pl, Pw, Pl, Pw, Pl, Pw, _],
+      [_, Pw, Pl, Pw, Fg, Pw, Pl, Pw, Fg, Pw, Pl, _],
+      [_, Fn, Pw, Pl, Pw, Fn, Pw, Pl, Pw, Fn, Pw, _],
+      [_, Pl, Fg, Pw, Pl, Pw, Fg, Pw, Pl, Pw, Fg, _],
+      [_, Pw, Pl, Fn, Pw, Pl, Pw, Fn, Pw, Pl, Pw, _],
     ]);
 
     // Stage 2: floor + walls

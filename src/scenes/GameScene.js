@@ -50,6 +50,10 @@ export default class GameScene extends Phaser.Scene {
       this.executeBuild();
     });
 
+    EventBus.on('drop-item', (index) => {
+      this.dropItem(index);
+    });
+
     // ─── Taming ───
     this.tamingManager = new TamingManager();
     this.tamedCount = 0;
@@ -91,21 +95,20 @@ export default class GameScene extends Phaser.Scene {
         }
       }
 
-      // Check if tapped the house plot (for building)
-      if (this.housePlotChosen && this.housePlot && this.buildingManager && !this.buildingManager.isComplete()) {
-        const distToHouse = Phaser.Math.Distance.Between(worldX, worldY, this.housePlotPosition.x, this.housePlotPosition.y);
-        if (distToHouse < 100) {
-          const distPlayer = Phaser.Math.Distance.Between(
-            this.player.x, this.player.y, this.housePlotPosition.x, this.housePlotPosition.y
-          );
-          if (distPlayer <= INTERACTION_RANGE) {
-            this.openBuildMenu();
-          } else {
-            this.pendingHouseTarget = true;
-            this.player.moveTo(this.housePlotPosition.x, this.housePlotPosition.y);
-          }
+      // Check if the player tapped on a collectible (BEFORE house check
+      // so items near the house plot can still be picked up)
+      const tappedItem = this.getTappedCollectible(worldX, worldY);
+      if (tappedItem) {
+        const dist = Phaser.Math.Distance.Between(
+          this.player.x, this.player.y, tappedItem.x, tappedItem.y
+        );
+        if (dist <= INTERACTION_RANGE) {
+          this.collectItem(tappedItem);
           return;
         }
+        this.pendingCollectTarget = tappedItem;
+        this.player.moveTo(tappedItem.x, tappedItem.y);
+        return;
       }
 
       // Check if the player tapped on an animal
@@ -139,19 +142,21 @@ export default class GameScene extends Phaser.Scene {
         return;
       }
 
-      // Check if the player tapped on a collectible
-      const tappedItem = this.getTappedCollectible(worldX, worldY);
-      if (tappedItem) {
-        const dist = Phaser.Math.Distance.Between(
-          this.player.x, this.player.y, tappedItem.x, tappedItem.y
-        );
-        if (dist <= INTERACTION_RANGE) {
-          this.collectItem(tappedItem);
+      // Check if tapped the house plot (for building)
+      if (this.housePlotChosen && this.housePlot && this.buildingManager && !this.buildingManager.isComplete()) {
+        const distToHouse = Phaser.Math.Distance.Between(worldX, worldY, this.housePlotPosition.x, this.housePlotPosition.y);
+        if (distToHouse < 100) {
+          const distPlayer = Phaser.Math.Distance.Between(
+            this.player.x, this.player.y, this.housePlotPosition.x, this.housePlotPosition.y
+          );
+          if (distPlayer <= INTERACTION_RANGE) {
+            this.openBuildMenu();
+          } else {
+            this.pendingHouseTarget = true;
+            this.player.moveTo(this.housePlotPosition.x, this.housePlotPosition.y);
+          }
           return;
         }
-        this.pendingCollectTarget = tappedItem;
-        this.player.moveTo(tappedItem.x, tappedItem.y);
-        return;
       }
 
       // Default: tap-to-move
@@ -162,6 +167,7 @@ export default class GameScene extends Phaser.Scene {
     this.events.on('shutdown', () => {
       EventBus.off('select-slot');
       EventBus.off('do-build');
+      EventBus.off('drop-item');
       for (const timer of this.respawnTimers) {
         timer.remove(false);
       }
@@ -374,9 +380,45 @@ export default class GameScene extends Phaser.Scene {
   }
 
   spawnCollectible(x, y, itemType) {
+    // Don't spawn on top of the house plot
+    if (this.housePlotPosition) {
+      const dist = Phaser.Math.Distance.Between(x, y, this.housePlotPosition.x, this.housePlotPosition.y);
+      if (dist < 90) return null;
+    }
     const item = new Collectible(this, x, y, itemType);
     this.collectiblesGroup.add(item);
     return item;
+  }
+
+  dropItem(index) {
+    const itemType = this.inventory.slots[index];
+    if (!itemType) return;
+
+    this.inventory.remove(index);
+
+    // Spawn a real collectible on the ground near the player
+    const offsetX = (Math.random() - 0.5) * 60;
+    const offsetY = 20 + Math.random() * 20;
+    const dropX = this.player.x + offsetX;
+    const dropY = this.player.y + offsetY;
+
+    // Brief toss animation, then spawn the real item
+    const tossed = this.add.image(this.player.x, this.player.y - 10, `item-${itemType}`);
+    tossed.setDepth(10000);
+    tossed.setScale(0.8);
+    this.tweens.add({
+      targets: tossed,
+      x: dropX,
+      y: dropY,
+      scaleX: 1,
+      scaleY: 1,
+      duration: 300,
+      ease: 'Bounce.easeOut',
+      onComplete: () => {
+        tossed.destroy();
+        this.spawnCollectible(dropX, dropY, itemType);
+      },
+    });
   }
 
   collectItem(item) {
@@ -454,6 +496,15 @@ export default class GameScene extends Phaser.Scene {
       duration: 400,
       ease: 'Back.easeOut',
     });
+
+    // Remove any collectibles overlapping the house plot
+    for (const item of this.collectiblesGroup.getChildren()) {
+      if (!item.active) continue;
+      const dist = Phaser.Math.Distance.Between(clearing.cx, clearing.cy, item.x, item.y);
+      if (dist < 90) {
+        item.destroy();
+      }
+    }
 
     // Create building manager now that we know the position
     this.buildingManager = new BuildingManager(this, clearing.cx, clearing.cy);

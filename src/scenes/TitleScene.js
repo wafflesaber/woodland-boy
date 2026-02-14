@@ -11,7 +11,7 @@ export default class TitleScene extends Phaser.Scene {
     const grassBar = this.add.rectangle(512, 720, 1024, 96, 0x228B22);
 
     // Game title
-    this.titleText = this.add.text(512, 280, 'Woodland Boy', {
+    this.titleText = this.add.text(512, 280, "Ben's World", {
       fontSize: '72px',
       color: '#FFFFFF',
       fontFamily: 'Arial, sans-serif',
