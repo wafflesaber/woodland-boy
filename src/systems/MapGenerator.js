@@ -21,7 +21,7 @@ export default class MapGenerator {
     const riverCells = this.generateRiverPath();
 
     // 3. Grass base + river + sand banks
-    this.layTerrain(riverCells);
+    this.layTerrain(riverCells, clearings);
 
     // 4. Dirt in clearings
     this.layClearing(clearings);
@@ -71,6 +71,14 @@ export default class MapGenerator {
   isInClearing(col, row, clearings) {
     for (const c of clearings) {
       if (col >= c.left && col <= c.right && row >= c.top && row <= c.bottom) return true;
+    }
+    return false;
+  }
+
+  isNearClearing(col, row, clearings, margin) {
+    for (const c of clearings) {
+      if (col >= c.left - margin && col <= c.right + margin &&
+          row >= c.top - margin && row <= c.bottom + margin) return true;
     }
     return false;
   }
@@ -155,7 +163,7 @@ export default class MapGenerator {
 
   // ─── 3. Lay terrain tiles ───
 
-  layTerrain(riverCells) {
+  layTerrain(riverCells, clearings) {
     // Build a set of sand bank cells (adjacent to river but not in river)
     const sandCells = new Set();
     for (const key of riverCells) {
@@ -175,10 +183,14 @@ export default class MapGenerator {
         const wx = col * TILE_SIZE + TILE_SIZE / 2;
         const wy = row * TILE_SIZE + TILE_SIZE / 2;
         const key = `${col},${row}`;
+        const nearClearing = this.isNearClearing(col, row, clearings, 1);
 
         let texKey;
-        if (riverCells.has(key)) {
+        if (riverCells.has(key) && !nearClearing) {
           texKey = `terrain-water-${Math.floor(Math.random() * 3)}`;
+        } else if (riverCells.has(key) && nearClearing) {
+          // River inside/adjacent to a clearing — render as sand (ford crossing)
+          texKey = 'terrain-sand';
         } else if (sandCells.has(key)) {
           texKey = 'terrain-sand';
         } else {
@@ -189,9 +201,10 @@ export default class MapGenerator {
       }
     }
 
-    // River collision: block ALL water tiles. Sand banks are the walkable border.
+    // River collision: block water tiles, but NOT those inside or adjacent to clearings
     for (const key of riverCells) {
       const [col, row] = key.split(',').map(Number);
+      if (this.isNearClearing(col, row, clearings, 1)) continue;
       const wx = col * TILE_SIZE + TILE_SIZE / 2;
       const wy = row * TILE_SIZE + TILE_SIZE / 2;
       const blocker = this.scene.add.zone(wx, wy, TILE_SIZE, TILE_SIZE);
