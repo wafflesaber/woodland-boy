@@ -1,4 +1,4 @@
-import { WORLD_WIDTH, WORLD_HEIGHT, ITEM_SPAWN_COUNTS, ITEM_RESPAWN_TIME, INTERACTION_RANGE } from '../config.js';
+import { WORLD_WIDTH, WORLD_HEIGHT, TILE_SIZE, ITEM_SPAWN_COUNTS, ITEM_RESPAWN_TIME, INTERACTION_RANGE } from '../config.js';
 import MapGenerator from '../systems/MapGenerator.js';
 import Player from '../entities/Player.js';
 import Collectible from '../entities/Collectible.js';
@@ -18,12 +18,14 @@ export default class GameScene extends Phaser.Scene {
     this.physics.world.setBounds(0, 0, WORLD_WIDTH, WORLD_HEIGHT);
 
     // ─── Player ───
-    const hp = this.mapData.housePlotPosition;
-    this.player = new Player(this, hp.x, hp.y - 100);
+    // Spawn near the first clearing
+    const startClearing = this.mapData.clearings[0];
+    this.player = new Player(this, startClearing.cx, startClearing.cy - 100);
 
-    // House plot marker
-    this.housePlot = this.add.image(hp.x, hp.y, 'house-stage-0');
-    this.housePlot.setDepth(hp.y - 24);
+    // ─── House plot (player chooses which clearing) ───
+    this.housePlotChosen = false;
+    this.housePlotPosition = null;
+    this.housePlot = null;
 
     // Player vs obstacles
     this.physics.add.collider(this.player, this.mapData.obstacles);
@@ -61,6 +63,15 @@ export default class GameScene extends Phaser.Scene {
 
       // Clear any pending collect target
       this.pendingCollectTarget = null;
+
+      // Check if the player tapped inside a clearing to place their house
+      if (!this.housePlotChosen) {
+        const clearing = this.getTappedClearing(worldX, worldY);
+        if (clearing) {
+          this.placeHousePlot(clearing);
+          return;
+        }
+      }
 
       // Check if the player tapped on a collectible
       const tappedItem = this.getTappedCollectible(worldX, worldY);
@@ -190,6 +201,46 @@ export default class GameScene extends Phaser.Scene {
   }
 
   // ─── Helpers ───
+
+  /**
+   * Check if a world position falls inside any of the 3 clearings.
+   * Returns the clearing object or null.
+   */
+  getTappedClearing(worldX, worldY) {
+    for (const c of this.mapData.clearings) {
+      const leftPx = c.left * TILE_SIZE;
+      const rightPx = (c.right + 1) * TILE_SIZE;
+      const topPx = c.top * TILE_SIZE;
+      const bottomPx = (c.bottom + 1) * TILE_SIZE;
+
+      if (worldX >= leftPx && worldX <= rightPx && worldY >= topPx && worldY <= bottomPx) {
+        return c;
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Place the house plot marker at the chosen clearing.
+   */
+  placeHousePlot(clearing) {
+    this.housePlotChosen = true;
+    this.housePlotPosition = { x: clearing.cx, y: clearing.cy };
+
+    // Place the house-stage-0 sprite
+    this.housePlot = this.add.image(clearing.cx, clearing.cy, 'house-stage-0');
+    this.housePlot.setDepth(clearing.cy - 24);
+
+    // Satisfying bounce-in tween
+    this.housePlot.setScale(0);
+    this.tweens.add({
+      targets: this.housePlot,
+      scaleX: 1,
+      scaleY: 1,
+      duration: 400,
+      ease: 'Back.easeOut',
+    });
+  }
 
   /**
    * Check if a world position is on top of a collectible.
