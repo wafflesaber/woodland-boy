@@ -434,16 +434,18 @@ export default class SpriteFactory {
       [_, _, _, Fb, _, _],
     ]);
 
-    // Planks
-    const Pw = '#DEB887'; // wood
-    const Pd = '#C4A06A'; // darker grain
+    // Planks — darker wood so they stand out against dirt/sand
+    const Pw = '#A0714A'; // medium-dark wood
+    const Pl = '#B8854C'; // lighter plank highlight
+    const Pd = '#7A5230'; // dark grain / gap between boards
+    const Pn = '#5C3A1E'; // nail / notch
     this.tex('item-planks', [
-      [Pw, Pw, Pw, Pw, Pw, Pw],
-      [Pd, Pw, Pw, Pd, Pw, Pw],
-      [Pw, Pw, Pw, Pw, Pw, Pw],
-      [Pw, Pw, Pd, Pw, Pw, Pd],
-      [Pw, Pw, Pw, Pw, Pw, Pw],
-      [Pd, Pw, Pw, Pw, Pd, Pw],
+      [Pw, Pl, Pw, Pl, Pw, Pl],
+      [Pd, Pd, Pd, Pd, Pd, Pd],
+      [Pl, Pw, Pn, Pw, Pl, Pw],
+      [Pd, Pd, Pd, Pd, Pd, Pd],
+      [Pw, Pl, Pw, Pn, Pw, Pl],
+      [Pw, Pw, Pl, Pw, Pw, Pw],
     ]);
 
     // Stones

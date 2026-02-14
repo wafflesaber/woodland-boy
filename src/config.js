@@ -34,7 +34,7 @@ export const ITEM_SPAWN_COUNTS = {
 };
 
 export const INVENTORY_SIZE = 6;
-export const INTERACTION_RANGE = 80;
+export const INTERACTION_RANGE = 100;
 export const FLEE_TRIGGER_RANGE = 120;
 export const FLEE_STOP_RANGE = 250;
 export const WANDER_RANGE = 130;
