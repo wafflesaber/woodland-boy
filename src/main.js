@@ -36,3 +36,4 @@ const config = {
 
 const game = new Phaser.Game(config);
 game.audioManager = new AudioManager();
+window.__GAME__ = game;

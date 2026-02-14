@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { FLEE_TRIGGER_RANGE, FLEE_STOP_RANGE, WANDER_RANGE, WANDER_HOME_RANGE, WORLD_WIDTH, WORLD_HEIGHT } from '../config.js';
+import { FLEE_TRIGGER_RANGE, FLEE_STOP_RANGE, WANDER_RANGE, WANDER_HOME_RANGE, WORLD_WIDTH, WORLD_HEIGHT, PLAYER_SPEED } from '../config.js';
 
 const State = {
   IDLE: 'IDLE',
@@ -26,6 +26,9 @@ export default class Animal extends Phaser.Physics.Arcade.Sprite {
     this.animalType = config.type;
     this.spawnOrigin = { x, y };
 
+    // Unique ID for TamingManager tracking
+    this.animalId = `${config.type}-${Phaser.Math.RND.uuid()}`;
+
     // Physics body — generous for collisions with obstacles
     this.body.setSize(22, 22);
     this.body.setOffset(5, 8);
@@ -48,13 +51,12 @@ export default class Animal extends Phaser.Physics.Arcade.Sprite {
     this.idleTimer = this.randomIdleTime();
     this.wanderTarget = null;
 
-    // Taming state (used by Phase 5)
+    // Taming state
     this.tamed = false;
     this.followerIndex = -1;
-    this.feedingProgress = 0;
 
-    // Create animations
-    this.createAnimations(scene);
+    // Feeding pause timer (ms remaining in FEEDING state)
+    this.feedingTimer = 0;
 
     // Walk frame index for manual toggling
     this.walkFrame = 1;
@@ -67,14 +69,8 @@ export default class Animal extends Phaser.Physics.Arcade.Sprite {
     );
   }
 
-  createAnimations(scene) {
-    // We don't create real Phaser anims — instead we manually toggle between
-    // frame-1 and frame-2 textures in update(), which is simpler for
-    // entities that only have 2 frames and need to face left/right via flipX.
-  }
-
   randomIdleTime() {
-    return 1000 + Math.random() * 2000; // 1–3 seconds
+    return 1000 + Math.random() * 2000; // 1-3 seconds
   }
 
   update(time, delta) {
@@ -89,12 +85,13 @@ export default class Animal extends Phaser.Physics.Arcade.Sprite {
         this.updateFlee(time, delta);
         break;
       case State.FEEDING:
-        // Handled externally (Phase 5) — animal just stands still
-        this.body.setVelocity(0, 0);
+        this.updateFeeding(time, delta);
         break;
       case State.TAMED:
+        this.updateTamed(time, delta);
+        break;
       case State.FOLLOWING:
-        // Handled externally (Phase 5)
+        this.updateFollowing(time, delta);
         break;
     }
 
@@ -106,6 +103,8 @@ export default class Animal extends Phaser.Physics.Arcade.Sprite {
     this.updateShadow();
   }
 
+  // ─── IDLE ───
+
   updateIdle(time, delta) {
     this.body.setVelocity(0, 0);
     this.setTexture(`${this.config.texture}-1`);
@@ -116,11 +115,12 @@ export default class Animal extends Phaser.Physics.Arcade.Sprite {
       return;
     }
 
-    // Shy animals check for nearby player
     if (this.config.shy && !this.tamed) {
       this.checkFlee();
     }
   }
+
+  // ─── WANDER ───
 
   updateWander(time, delta) {
     if (!this.wanderTarget) {
@@ -132,23 +132,20 @@ export default class Animal extends Phaser.Physics.Arcade.Sprite {
     const dy = this.wanderTarget.y - this.y;
     const dist = Math.sqrt(dx * dx + dy * dy);
 
-    // Arrived at target
     if (dist < 10) {
       this.enterIdle();
       return;
     }
 
-    // Move toward target
     this.scene.physics.moveTo(this, this.wanderTarget.x, this.wanderTarget.y, this.config.speed);
-
-    // Face movement direction
     this.updateFacing();
 
-    // Shy animals check for nearby player
     if (this.config.shy && !this.tamed) {
       this.checkFlee();
     }
   }
+
+  // ─── FLEE ───
 
   updateFlee(time, delta) {
     const player = this.scene.player;
@@ -161,19 +158,71 @@ export default class Animal extends Phaser.Physics.Arcade.Sprite {
     const dy = this.y - player.y;
     const dist = Math.sqrt(dx * dx + dy * dy);
 
-    // Player is far enough away — stop fleeing
     if (dist > FLEE_STOP_RANGE) {
       this.enterIdle();
       return;
     }
 
-    // Move directly away from player
     const angle = Math.atan2(dy, dx);
     const vx = Math.cos(angle) * this.config.fleeSpeed;
     const vy = Math.sin(angle) * this.config.fleeSpeed;
     this.body.setVelocity(vx, vy);
+    this.updateFacing();
+  }
 
-    // Face movement direction
+  // ─── FEEDING ───
+
+  updateFeeding(time, delta) {
+    this.body.setVelocity(0, 0);
+    this.setTexture(`${this.config.texture}-1`);
+
+    this.feedingTimer -= delta;
+    if (this.feedingTimer <= 0) {
+      // If tamed during feeding, go to TAMED state
+      if (this.tamed) {
+        this.state = State.TAMED;
+      } else {
+        this.enterIdle();
+      }
+    }
+  }
+
+  // ─── TAMED (idle near player) ───
+
+  updateTamed(time, delta) {
+    const player = this.scene.player;
+    if (!player) return;
+
+    const followOffset = 60 + this.followerIndex * 40;
+    const dist = Phaser.Math.Distance.Between(this.x, this.y, player.x, player.y);
+
+    if (dist > followOffset + 30) {
+      this.state = State.FOLLOWING;
+      return;
+    }
+
+    // Near player — idle
+    this.body.setVelocity(0, 0);
+  }
+
+  // ─── FOLLOWING (moving toward player) ───
+
+  updateFollowing(time, delta) {
+    const player = this.scene.player;
+    if (!player) return;
+
+    const followOffset = 60 + this.followerIndex * 40;
+    const dist = Phaser.Math.Distance.Between(this.x, this.y, player.x, player.y);
+
+    if (dist <= followOffset) {
+      this.state = State.TAMED;
+      this.body.setVelocity(0, 0);
+      return;
+    }
+
+    // Move toward player at 80% of player speed
+    const followSpeed = PLAYER_SPEED * 0.8;
+    this.scene.physics.moveTo(this, player.x, player.y, followSpeed);
     this.updateFacing();
   }
 
@@ -189,7 +238,6 @@ export default class Animal extends Phaser.Physics.Arcade.Sprite {
   startWander() {
     this.state = State.WANDER;
 
-    // Pick a wander target — biased toward spawn origin if too far away
     const distFromHome = Phaser.Math.Distance.Between(
       this.x, this.y, this.spawnOrigin.x, this.spawnOrigin.y
     );
@@ -197,7 +245,6 @@ export default class Animal extends Phaser.Physics.Arcade.Sprite {
     let targetX, targetY;
 
     if (distFromHome > WANDER_HOME_RANGE) {
-      // Wander back toward home
       const angle = Phaser.Math.Angle.Between(
         this.x, this.y, this.spawnOrigin.x, this.spawnOrigin.y
       );
@@ -205,19 +252,38 @@ export default class Animal extends Phaser.Physics.Arcade.Sprite {
       targetX = this.x + Math.cos(angle) * wanderDist;
       targetY = this.y + Math.sin(angle) * wanderDist;
     } else {
-      // Random direction
       const angle = Math.random() * Math.PI * 2;
       const wanderDist = 50 + Math.random() * WANDER_RANGE;
       targetX = this.x + Math.cos(angle) * wanderDist;
       targetY = this.y + Math.sin(angle) * wanderDist;
     }
 
-    // Clamp to world bounds (with margin)
     const margin = 40;
     targetX = Phaser.Math.Clamp(targetX, margin, WORLD_WIDTH - margin);
     targetY = Phaser.Math.Clamp(targetY, margin, WORLD_HEIGHT - margin);
 
     this.wanderTarget = { x: targetX, y: targetY };
+  }
+
+  /**
+   * Enter feeding state — animal stands still for duration ms.
+   */
+  enterFeeding(duration = 1500) {
+    this.state = State.FEEDING;
+    this.feedingTimer = duration;
+    this.wanderTarget = null;
+    this.body.setVelocity(0, 0);
+  }
+
+  /**
+   * Mark this animal as tamed and assign a follower index.
+   */
+  setTamed(followerIndex) {
+    this.tamed = true;
+    this.followerIndex = followerIndex;
+    this.state = State.TAMED;
+    this.wanderTarget = null;
+    this.body.setVelocity(0, 0);
   }
 
   checkFlee() {
@@ -244,7 +310,6 @@ export default class Animal extends Phaser.Physics.Arcade.Sprite {
     const speed = this.body.velocity.length();
     if (speed > 5) {
       this.walkFrameTimer += delta;
-      // Toggle every ~250ms (4fps walk cycle)
       if (this.walkFrameTimer > 250) {
         this.walkFrameTimer = 0;
         this.walkFrame = this.walkFrame === 1 ? 2 : 1;
@@ -264,7 +329,6 @@ export default class Animal extends Phaser.Physics.Arcade.Sprite {
     }
   }
 
-  // Clean up shadow when this sprite is destroyed
   destroy(fromScene) {
     if (this.shadow) {
       this.shadow.destroy();

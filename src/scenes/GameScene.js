@@ -4,6 +4,7 @@ import Player from '../entities/Player.js';
 import Collectible from '../entities/Collectible.js';
 import Animal from '../entities/Animal.js';
 import InventoryManager from '../systems/InventoryManager.js';
+import TamingManager from '../systems/TamingManager.js';
 import EventBus from '../utils/EventBus.js';
 
 export default class GameScene extends Phaser.Scene {
@@ -19,7 +20,6 @@ export default class GameScene extends Phaser.Scene {
     this.physics.world.setBounds(0, 0, WORLD_WIDTH, WORLD_HEIGHT);
 
     // ─── Player ───
-    // Spawn near the first clearing
     const startClearing = this.mapData.clearings[0];
     this.player = new Player(this, startClearing.cx, startClearing.cy - 100);
 
@@ -39,30 +39,30 @@ export default class GameScene extends Phaser.Scene {
     // ─── Inventory ───
     this.inventory = new InventoryManager();
 
-    // Listen for slot selection from UI
     EventBus.on('select-slot', (index) => {
       this.inventory.selectSlot(index);
     });
 
+    // ─── Taming ───
+    this.tamingManager = new TamingManager();
+    this.tamedCount = 0;
+
     // ─── Collectibles ───
     this.collectiblesGroup = this.physics.add.group();
-    this.spawnPointPool = {}; // itemType → array of available spawn positions
-    this.respawnTimers = [];  // active respawn timers
+    this.spawnPointPool = {};
+    this.respawnTimers = [];
 
     this.spawnInitialItems();
 
-    // No auto-collect on overlap — player must tap items intentionally.
-
-    // Pending interaction: when player taps an item that's out of range,
-    // walk toward it and collect on arrival.
+    // Pending interaction targets
     this.pendingCollectTarget = null;
+    this.pendingAnimalTarget = null;
 
     // ─── Animals ───
     this.animalsGroup = this.physics.add.group();
-    this.animals = []; // flat array for update loop
+    this.animals = [];
     this.spawnAnimals();
 
-    // Animals collide with obstacles (trees, rocks) but not each other
     this.physics.add.collider(this.animalsGroup, this.mapData.obstacles);
 
     // ─── Touch input ───
@@ -70,8 +70,9 @@ export default class GameScene extends Phaser.Scene {
       const worldX = pointer.worldX;
       const worldY = pointer.worldY;
 
-      // Clear any pending collect target
+      // Clear pending targets
       this.pendingCollectTarget = null;
+      this.pendingAnimalTarget = null;
 
       // Check if the player tapped inside a clearing to place their house
       if (!this.housePlotChosen) {
@@ -82,12 +83,43 @@ export default class GameScene extends Phaser.Scene {
         }
       }
 
-      // Check if the player tapped on an animal (feeding interaction in Phase 5)
+      // Check if tapped the house plot (for building — Phase 6)
+      if (this.housePlotChosen && this.housePlot) {
+        const distToHouse = Phaser.Math.Distance.Between(worldX, worldY, this.housePlotPosition.x, this.housePlotPosition.y);
+        if (distToHouse < 60) {
+          this.player.moveTo(this.housePlotPosition.x, this.housePlotPosition.y);
+          return;
+        }
+      }
+
+      // Check if the player tapped on an animal
       const tappedAnimal = this.getTappedAnimal(worldX, worldY);
       if (tappedAnimal) {
-        // Phase 5 will add feeding logic here.
-        // For now, just walk toward the animal.
-        this.player.moveTo(tappedAnimal.x, tappedAnimal.y);
+        const dist = Phaser.Math.Distance.Between(
+          this.player.x, this.player.y, tappedAnimal.x, tappedAnimal.y
+        );
+
+        if (dist <= INTERACTION_RANGE) {
+          this.handleAnimalInteraction(tappedAnimal);
+        } else {
+          // Show thought bubble hint immediately for tameable animals
+          // so the player sees what it wants even if it's shy and flees.
+          // Pinned so it stays put instead of chasing a fleeing animal offscreen.
+          if (tappedAnimal.config.tameable && !tappedAnimal.tamed) {
+            const favoriteFood = tappedAnimal.config.favoriteFood;
+            EventBus.emit('show-thought-bubble', {
+              animalId: tappedAnimal.animalId,
+              worldX: tappedAnimal.x,
+              worldY: tappedAnimal.y - 45,
+              itemTexture: `item-${favoriteFood}`,
+              pinned: true,
+            });
+          }
+
+          // Walk toward animal, interact on arrival
+          this.pendingAnimalTarget = tappedAnimal;
+          this.player.moveTo(tappedAnimal.x, tappedAnimal.y);
+        }
         return;
       }
 
@@ -98,11 +130,9 @@ export default class GameScene extends Phaser.Scene {
           this.player.x, this.player.y, tappedItem.x, tappedItem.y
         );
         if (dist <= INTERACTION_RANGE) {
-          // Close enough — collect immediately
           this.collectItem(tappedItem);
           return;
         }
-        // Too far — walk toward item, collect when player arrives
         this.pendingCollectTarget = tappedItem;
         this.player.moveTo(tappedItem.x, tappedItem.y);
         return;
@@ -126,18 +156,16 @@ export default class GameScene extends Phaser.Scene {
       this.player.update(time, delta);
     }
 
-    // Update all animals
     for (const animal of this.animals) {
       if (animal.active) {
         animal.update(time, delta);
       }
     }
 
-    // Check if player has arrived near a pending collect target
+    // Check pending collect target
     if (this.pendingCollectTarget) {
       const target = this.pendingCollectTarget;
       if (!target.active) {
-        // Item was already collected or destroyed
         this.pendingCollectTarget = null;
       } else {
         const dist = Phaser.Math.Distance.Between(
@@ -149,6 +177,151 @@ export default class GameScene extends Phaser.Scene {
         }
       }
     }
+
+    // Check pending animal target
+    if (this.pendingAnimalTarget) {
+      const target = this.pendingAnimalTarget;
+      if (!target.active) {
+        this.pendingAnimalTarget = null;
+      } else {
+        const dist = Phaser.Math.Distance.Between(
+          this.player.x, this.player.y, target.x, target.y
+        );
+        if (dist <= INTERACTION_RANGE) {
+          this.handleAnimalInteraction(target);
+          this.pendingAnimalTarget = null;
+          // Stop player from continuing past the animal
+          this.player.target = null;
+          this.player.body.setVelocity(0, 0);
+        }
+      }
+    }
+  }
+
+  // ─── Animal interaction ───
+
+  handleAnimalInteraction(animal) {
+    if (!animal.config.tameable) return;
+    if (animal.tamed) return;
+    if (animal.state === 'FEEDING') return;
+
+    const selectedItem = this.inventory.getSelected();
+    const favoriteFood = animal.config.favoriteFood;
+
+    if (!selectedItem || selectedItem !== favoriteFood) {
+      // Wrong item or no item — show thought bubble hint
+      EventBus.emit('show-thought-bubble', {
+        animalId: animal.animalId,
+        worldX: animal.x,
+        worldY: animal.y - 30,
+        itemTexture: `item-${favoriteFood}`,
+      });
+
+      if (this.game.audioManager) {
+        this.game.audioManager.playError();
+      }
+      return;
+    }
+
+    this.feedAnimal(animal);
+  }
+
+  feedAnimal(animal) {
+    // Consume item
+    this.inventory.consumeSelected();
+
+    // Init taming progress on first feed
+    this.tamingManager.initAnimal(animal.animalId, animal.config.requiredFeedings);
+
+    // Animal enters feeding state
+    animal.enterFeeding(1500);
+
+    // Stop player movement so tween doesn't fight physics
+    this.player.target = null;
+    this.player.body.setVelocity(0, 0);
+
+    // Brief scale-based "offering" pulse (visual only, no position change)
+    this.tweens.add({
+      targets: this.player,
+      scaleX: 1.15,
+      scaleY: 0.9,
+      duration: 120,
+      yoyo: true,
+      ease: 'Sine.easeInOut',
+    });
+
+    if (this.game.audioManager) {
+      this.game.audioManager.playFeed();
+    }
+
+    // Heart particle rising above animal
+    this.spawnHeartParticle(animal.x, animal.y - 20);
+
+    // Increment feeding progress
+    const result = this.tamingManager.feed(animal.animalId);
+    const progress = this.tamingManager.getProgress(animal.animalId);
+
+    // Tell UIScene about the progress
+    EventBus.emit('taming-progress', {
+      animalId: animal.animalId,
+      worldX: animal.x,
+      worldY: animal.y,
+      current: progress.current,
+      max: progress.max,
+    });
+
+    if (result === 'tamed') {
+      // Delay celebration until feeding pause ends
+      this.time.delayedCall(1500, () => {
+        this.tameAnimal(animal);
+      });
+    }
+  }
+
+  tameAnimal(animal) {
+    const index = this.tamedCount;
+    this.tamedCount++;
+
+    animal.setTamed(index);
+
+    // Burst of heart particles
+    for (let i = 0; i < 10; i++) {
+      const angle = (i / 10) * Math.PI * 2;
+      const burstDist = 20 + Math.random() * 20;
+      const tx = animal.x + Math.cos(angle) * burstDist;
+      const ty = animal.y + Math.sin(angle) * burstDist - 30;
+      this.spawnHeartParticle(animal.x, animal.y - 10, tx, ty);
+    }
+
+    if (this.game.audioManager) {
+      this.game.audioManager.playTameSuccess();
+    }
+
+    EventBus.emit('animal-tamed', {
+      animalId: animal.animalId,
+      animalType: animal.animalType,
+    });
+  }
+
+  spawnHeartParticle(x, y, targetX, targetY) {
+    const heart = this.add.image(x, y, 'particle-heart');
+    heart.setDepth(10000);
+    heart.setScale(0.8);
+
+    const tx = targetX !== undefined ? targetX : x + (Math.random() - 0.5) * 20;
+    const ty = targetY !== undefined ? targetY : y - 40;
+
+    this.tweens.add({
+      targets: heart,
+      x: tx,
+      y: ty,
+      alpha: 0,
+      scaleX: 0.3,
+      scaleY: 0.3,
+      duration: 800,
+      ease: 'Power2',
+      onComplete: () => heart.destroy(),
+    });
   }
 
   // ─── Item spawning ───
@@ -157,13 +330,11 @@ export default class GameScene extends Phaser.Scene {
     const spawnPoints = this.mapData.itemSpawnPoints;
 
     for (const [itemType, positions] of Object.entries(spawnPoints)) {
-      // Shuffle positions so we pick a random subset
       const shuffled = Phaser.Utils.Array.Shuffle([...positions]);
       const spawnCount = ITEM_SPAWN_COUNTS[itemType] || 6;
       const toSpawn = shuffled.slice(0, spawnCount);
       const remaining = shuffled.slice(spawnCount);
 
-      // Store remaining positions as the available pool for respawning
       this.spawnPointPool[itemType] = remaining;
 
       for (const pos of toSpawn) {
@@ -179,29 +350,25 @@ export default class GameScene extends Phaser.Scene {
   }
 
   collectItem(item) {
-    if (!item.active) return; // already being collected
-
-    if (this.inventory.isFull()) return; // no room
+    if (!item.active) return;
+    if (this.inventory.isFull()) return;
 
     const added = this.inventory.add(item.itemType);
     if (!added) return;
 
     const itemType = item.itemType;
-
-    // Play collect animation
     item.collect();
 
-    // TODO: play pickup sound (Phase 7)
+    if (this.game.audioManager) {
+      this.game.audioManager.playPickup();
+    }
 
-    // Schedule respawn
     this.scheduleRespawn(itemType);
   }
 
   scheduleRespawn(itemType) {
-    // Respawn after ITEM_RESPAWN_TIME at a random available spawn point
-    const delay = ITEM_RESPAWN_TIME + Math.random() * 10000; // 40-50s
+    const delay = ITEM_RESPAWN_TIME + Math.random() * 10000;
     const timer = this.time.delayedCall(delay, () => {
-      // Pick a spawn point from the pool, or from all known points as fallback
       const pool = this.spawnPointPool[itemType];
       const allPoints = this.mapData.itemSpawnPoints[itemType];
       const source = pool && pool.length > 0 ? pool : allPoints;
@@ -212,12 +379,10 @@ export default class GameScene extends Phaser.Scene {
       const pos = source[idx];
       this.spawnCollectible(pos.x, pos.y, itemType);
 
-      // Remove from pool so we cycle through different spots
       if (pool && pool.length > 0) {
         pool.splice(idx, 1);
       }
 
-      // Remove this timer from tracking
       const timerIdx = this.respawnTimers.indexOf(timer);
       if (timerIdx !== -1) this.respawnTimers.splice(timerIdx, 1);
     });
@@ -227,10 +392,6 @@ export default class GameScene extends Phaser.Scene {
 
   // ─── Helpers ───
 
-  /**
-   * Check if a world position falls inside any of the 3 clearings.
-   * Returns the clearing object or null.
-   */
   getTappedClearing(worldX, worldY) {
     for (const c of this.mapData.clearings) {
       const leftPx = c.left * TILE_SIZE;
@@ -245,18 +406,13 @@ export default class GameScene extends Phaser.Scene {
     return null;
   }
 
-  /**
-   * Place the house plot marker at the chosen clearing.
-   */
   placeHousePlot(clearing) {
     this.housePlotChosen = true;
     this.housePlotPosition = { x: clearing.cx, y: clearing.cy };
 
-    // Place the house-stage-0 sprite
     this.housePlot = this.add.image(clearing.cx, clearing.cy, 'house-stage-0');
     this.housePlot.setDepth(clearing.cy - 24);
 
-    // Satisfying bounce-in tween
     this.housePlot.setScale(0);
     this.tweens.add({
       targets: this.housePlot,
@@ -267,13 +423,9 @@ export default class GameScene extends Phaser.Scene {
     });
   }
 
-  /**
-   * Check if a world position is on top of a collectible.
-   * Uses a generous radius for kid-friendly taps.
-   */
   getTappedCollectible(worldX, worldY) {
     let closest = null;
-    let closestDist = 60; // generous tap radius in world pixels (kid-friendly)
+    let closestDist = 60;
 
     for (const item of this.collectiblesGroup.getChildren()) {
       if (!item.active) continue;
@@ -298,9 +450,7 @@ export default class GameScene extends Phaser.Scene {
 
       const count = config.count;
       for (let i = 0; i < count; i++) {
-        // Pick a spawn point, cycling through available ones
         const point = spawnPoints[i % spawnPoints.length];
-        // Add slight randomness so animals of the same type don't stack
         const offsetX = (Math.random() - 0.5) * 60;
         const offsetY = (Math.random() - 0.5) * 60;
         const x = Phaser.Math.Clamp(point.x + offsetX, 40, WORLD_WIDTH - 40);
@@ -313,10 +463,6 @@ export default class GameScene extends Phaser.Scene {
     }
   }
 
-  /**
-   * Check if a world position is on top of an animal.
-   * Uses a generous radius for kid-friendly taps.
-   */
   getTappedAnimal(worldX, worldY) {
     let closest = null;
     let closestDist = 60;
