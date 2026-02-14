@@ -474,9 +474,9 @@ export default class SpriteFactory {
   // ─── TERRAIN (16x16 = 64x64) ───
 
   generateTerrain() {
-    // Grass variants
+    // Grass variants — lighter palette so trees/bushes stand out
     for (let i = 0; i < 3; i++) {
-      this.tex(`terrain-grass-${i}`, this.noise(16, 16, ['#228B22', '#2E8B57', '#32CD32', '#228B22', '#228B22']));
+      this.tex(`terrain-grass-${i}`, this.noise(16, 16, ['#5DBB63', '#7EC850', '#6ABF4B', '#8FD460', '#5DBB63']));
     }
 
     // Water variants
@@ -511,9 +511,9 @@ export default class SpriteFactory {
     ]);
 
     // Tree canopy variants (10x8 grid, scale 4 = 40x32)
-    const Lg = '#228B22'; // leaf green
-    const Ld = '#1B6B1B'; // dark leaf
-    const Ll = '#32CD32'; // light leaf
+    const Lg = '#1A7A2E'; // leaf green — darker than grass
+    const Ld = '#0E5C1A'; // dark leaf
+    const Ll = '#2D9B3A'; // light leaf highlight
     this.tex('tree-canopy-1', [
       [_, _, _, Lg, Lg, Lg, Lg, _, _, _],
       [_, _, Lg, Lg, Ll, Lg, Lg, Lg, _, _],
@@ -536,21 +536,24 @@ export default class SpriteFactory {
       [_, _, _, Lg, Lg, Lg, Lg, _, _, _],
     ]);
 
-    // Bush (6x4 grid = 24x16)
+    // Bush (6x4 grid = 24x16) — olive/yellow-green, distinct from trees
+    const Bg = '#4A7C34'; // bush green
+    const Bd = '#3A6228'; // bush dark
+    const Bl = '#6B9F50'; // bush light
     this.tex('bush', [
-      [_, Lg, Lg, Lg, Lg, _],
-      [Lg, Lg, Ld, Lg, Lg, Lg],
-      [Lg, Ld, Lg, Lg, Ld, Lg],
-      [_, Lg, Lg, Lg, Lg, _],
+      [_, Bg, Bl, Bg, Bg, _],
+      [Bg, Bl, Bd, Bg, Bl, Bg],
+      [Bg, Bd, Bg, Bl, Bd, Bg],
+      [_, Bg, Bg, Bg, Bg, _],
     ]);
 
     // Berry bush (6x4 grid = 24x16, with red dots)
     const Rb = '#DC143C';
     this.tex('bush-berry', [
-      [_, Lg, Lg, Rb, Lg, _],
-      [Lg, Rb, Ld, Lg, Lg, Lg],
-      [Lg, Ld, Lg, Rb, Ld, Lg],
-      [_, Lg, Rb, Lg, Lg, _],
+      [_, Bg, Bl, Rb, Bg, _],
+      [Bg, Rb, Bd, Bg, Bl, Bg],
+      [Bg, Bd, Bg, Rb, Bd, Bg],
+      [_, Bg, Rb, Bg, Bg, _],
     ]);
 
     // Rock (6x5 grid = 24x20)
@@ -566,20 +569,21 @@ export default class SpriteFactory {
     ]);
 
     // Flowers (3x3 = 12x12)
+    const Fs = '#2E7D32'; // flower stem green
     this.tex('flower-red', [
       [_, '#FF4444', _],
       ['#FF4444', '#FFFF00', '#FF4444'],
-      [_, '#228B22', _],
+      [_, Fs, _],
     ]);
     this.tex('flower-yellow', [
       [_, '#FFD700', _],
       ['#FFD700', '#FFA500', '#FFD700'],
-      [_, '#228B22', _],
+      [_, Fs, _],
     ]);
     this.tex('flower-purple', [
       [_, '#9370DB', _],
       ['#9370DB', '#FFD700', '#9370DB'],
-      [_, '#228B22', _],
+      [_, Fs, _],
     ]);
   }
 

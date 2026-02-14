@@ -189,20 +189,13 @@ export default class MapGenerator {
       }
     }
 
-    // River collision: line of invisible bodies along inner edges of river
-    // Only block the center of the river; banks are walkable
+    // River collision: block ALL water tiles. Sand banks are the walkable border.
     for (const key of riverCells) {
       const [col, row] = key.split(',').map(Number);
-      // Check if this cell is the center column of the river at this row
-      let leftNeighbor = riverCells.has(`${col - 1},${row}`);
-      let rightNeighbor = riverCells.has(`${col + 1},${row}`);
-      if (leftNeighbor && rightNeighbor) {
-        // This is an interior river cell — add collision
-        const wx = col * TILE_SIZE + TILE_SIZE / 2;
-        const wy = row * TILE_SIZE + TILE_SIZE / 2;
-        const blocker = this.scene.add.zone(wx, wy, TILE_SIZE, TILE_SIZE);
-        this.obstacles.add(blocker);
-      }
+      const wx = col * TILE_SIZE + TILE_SIZE / 2;
+      const wy = row * TILE_SIZE + TILE_SIZE / 2;
+      const blocker = this.scene.add.zone(wx, wy, TILE_SIZE, TILE_SIZE);
+      this.obstacles.add(blocker);
     }
   }
 
