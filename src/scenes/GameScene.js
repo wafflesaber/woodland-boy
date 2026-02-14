@@ -1,7 +1,8 @@
-import { WORLD_WIDTH, WORLD_HEIGHT, TILE_SIZE, ITEM_SPAWN_COUNTS, ITEM_RESPAWN_TIME, INTERACTION_RANGE } from '../config.js';
+import { WORLD_WIDTH, WORLD_HEIGHT, TILE_SIZE, ITEM_SPAWN_COUNTS, ITEM_RESPAWN_TIME, INTERACTION_RANGE, ANIMALS } from '../config.js';
 import MapGenerator from '../systems/MapGenerator.js';
 import Player from '../entities/Player.js';
 import Collectible from '../entities/Collectible.js';
+import Animal from '../entities/Animal.js';
 import InventoryManager from '../systems/InventoryManager.js';
 import EventBus from '../utils/EventBus.js';
 
@@ -56,6 +57,14 @@ export default class GameScene extends Phaser.Scene {
     // walk toward it and collect on arrival.
     this.pendingCollectTarget = null;
 
+    // ─── Animals ───
+    this.animalsGroup = this.physics.add.group();
+    this.animals = []; // flat array for update loop
+    this.spawnAnimals();
+
+    // Animals collide with obstacles (trees, rocks) but not each other
+    this.physics.add.collider(this.animalsGroup, this.mapData.obstacles);
+
     // ─── Touch input ───
     this.input.on('pointerdown', (pointer) => {
       const worldX = pointer.worldX;
@@ -71,6 +80,15 @@ export default class GameScene extends Phaser.Scene {
           this.placeHousePlot(clearing);
           return;
         }
+      }
+
+      // Check if the player tapped on an animal (feeding interaction in Phase 5)
+      const tappedAnimal = this.getTappedAnimal(worldX, worldY);
+      if (tappedAnimal) {
+        // Phase 5 will add feeding logic here.
+        // For now, just walk toward the animal.
+        this.player.moveTo(tappedAnimal.x, tappedAnimal.y);
+        return;
       }
 
       // Check if the player tapped on a collectible
@@ -106,6 +124,13 @@ export default class GameScene extends Phaser.Scene {
   update(time, delta) {
     if (this.player) {
       this.player.update(time, delta);
+    }
+
+    // Update all animals
+    for (const animal of this.animals) {
+      if (animal.active) {
+        animal.update(time, delta);
+      }
     }
 
     // Check if player has arrived near a pending collect target
@@ -255,6 +280,52 @@ export default class GameScene extends Phaser.Scene {
       const dist = Phaser.Math.Distance.Between(worldX, worldY, item.x, item.y);
       if (dist < closestDist) {
         closest = item;
+        closestDist = dist;
+      }
+    }
+
+    return closest;
+  }
+
+  // ─── Animal spawning ───
+
+  spawnAnimals() {
+    const zones = this.mapData.animalSpawnZones;
+
+    for (const [animalType, config] of Object.entries(ANIMALS)) {
+      const spawnPoints = zones[animalType];
+      if (!spawnPoints || spawnPoints.length === 0) continue;
+
+      const count = config.count;
+      for (let i = 0; i < count; i++) {
+        // Pick a spawn point, cycling through available ones
+        const point = spawnPoints[i % spawnPoints.length];
+        // Add slight randomness so animals of the same type don't stack
+        const offsetX = (Math.random() - 0.5) * 60;
+        const offsetY = (Math.random() - 0.5) * 60;
+        const x = Phaser.Math.Clamp(point.x + offsetX, 40, WORLD_WIDTH - 40);
+        const y = Phaser.Math.Clamp(point.y + offsetY, 40, WORLD_HEIGHT - 40);
+
+        const animal = new Animal(this, x, y, config);
+        this.animalsGroup.add(animal);
+        this.animals.push(animal);
+      }
+    }
+  }
+
+  /**
+   * Check if a world position is on top of an animal.
+   * Uses a generous radius for kid-friendly taps.
+   */
+  getTappedAnimal(worldX, worldY) {
+    let closest = null;
+    let closestDist = 60;
+
+    for (const animal of this.animals) {
+      if (!animal.active) continue;
+      const dist = Phaser.Math.Distance.Between(worldX, worldY, animal.x, animal.y);
+      if (dist < closestDist) {
+        closest = animal;
         closestDist = dist;
       }
     }
