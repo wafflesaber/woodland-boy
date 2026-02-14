@@ -1,10 +1,11 @@
-import { WORLD_WIDTH, WORLD_HEIGHT, TILE_SIZE, ITEM_SPAWN_COUNTS, ITEM_RESPAWN_TIME, INTERACTION_RANGE, ANIMALS } from '../config.js';
+import { WORLD_WIDTH, WORLD_HEIGHT, TILE_SIZE, ITEM_SPAWN_COUNTS, ITEM_RESPAWN_TIME, INTERACTION_RANGE, ANIMALS, BUILDING_STAGES } from '../config.js';
 import MapGenerator from '../systems/MapGenerator.js';
 import Player from '../entities/Player.js';
 import Collectible from '../entities/Collectible.js';
 import Animal from '../entities/Animal.js';
 import InventoryManager from '../systems/InventoryManager.js';
 import TamingManager from '../systems/TamingManager.js';
+import BuildingManager from '../systems/BuildingManager.js';
 import EventBus from '../utils/EventBus.js';
 
 export default class GameScene extends Phaser.Scene {
@@ -27,6 +28,8 @@ export default class GameScene extends Phaser.Scene {
     this.housePlotChosen = false;
     this.housePlotPosition = null;
     this.housePlot = null;
+    this.buildingManager = null;
+    this.pendingHouseTarget = false;
 
     // Player vs obstacles
     this.physics.add.collider(this.player, this.mapData.obstacles);
@@ -41,6 +44,10 @@ export default class GameScene extends Phaser.Scene {
 
     EventBus.on('select-slot', (index) => {
       this.inventory.selectSlot(index);
+    });
+
+    EventBus.on('do-build', () => {
+      this.executeBuild();
     });
 
     // ─── Taming ───
@@ -73,6 +80,7 @@ export default class GameScene extends Phaser.Scene {
       // Clear pending targets
       this.pendingCollectTarget = null;
       this.pendingAnimalTarget = null;
+      this.pendingHouseTarget = false;
 
       // Check if the player tapped inside a clearing to place their house
       if (!this.housePlotChosen) {
@@ -83,11 +91,19 @@ export default class GameScene extends Phaser.Scene {
         }
       }
 
-      // Check if tapped the house plot (for building — Phase 6)
-      if (this.housePlotChosen && this.housePlot) {
+      // Check if tapped the house plot (for building)
+      if (this.housePlotChosen && this.housePlot && this.buildingManager && !this.buildingManager.isComplete()) {
         const distToHouse = Phaser.Math.Distance.Between(worldX, worldY, this.housePlotPosition.x, this.housePlotPosition.y);
         if (distToHouse < 60) {
-          this.player.moveTo(this.housePlotPosition.x, this.housePlotPosition.y);
+          const distPlayer = Phaser.Math.Distance.Between(
+            this.player.x, this.player.y, this.housePlotPosition.x, this.housePlotPosition.y
+          );
+          if (distPlayer <= INTERACTION_RANGE) {
+            this.openBuildMenu();
+          } else {
+            this.pendingHouseTarget = true;
+            this.player.moveTo(this.housePlotPosition.x, this.housePlotPosition.y);
+          }
           return;
         }
       }
@@ -145,6 +161,7 @@ export default class GameScene extends Phaser.Scene {
     // ─── Clean up on shutdown ───
     this.events.on('shutdown', () => {
       EventBus.off('select-slot');
+      EventBus.off('do-build');
       for (const timer of this.respawnTimers) {
         timer.remove(false);
       }
@@ -175,6 +192,19 @@ export default class GameScene extends Phaser.Scene {
           this.collectItem(target);
           this.pendingCollectTarget = null;
         }
+      }
+    }
+
+    // Check pending house target
+    if (this.pendingHouseTarget && this.housePlotPosition) {
+      const dist = Phaser.Math.Distance.Between(
+        this.player.x, this.player.y, this.housePlotPosition.x, this.housePlotPosition.y
+      );
+      if (dist <= INTERACTION_RANGE) {
+        this.pendingHouseTarget = false;
+        this.player.target = null;
+        this.player.body.setVelocity(0, 0);
+        this.openBuildMenu();
       }
     }
 
@@ -421,6 +451,106 @@ export default class GameScene extends Phaser.Scene {
       duration: 400,
       ease: 'Back.easeOut',
     });
+
+    // Create building manager now that we know the position
+    this.buildingManager = new BuildingManager(this, clearing.cx, clearing.cy);
+    this.buildingManager.houseSprite = this.housePlot;
+  }
+
+  // ─── Building ───
+
+  openBuildMenu() {
+    if (!this.buildingManager || this.buildingManager.isComplete()) return;
+
+    const next = this.buildingManager.getNextStageCost();
+    if (!next) return;
+
+    // Gather current material counts for the UI
+    const materials = {};
+    for (const [itemType, needed] of Object.entries(next.cost)) {
+      materials[itemType] = { have: this.inventory.countOf(itemType), need: needed };
+    }
+
+    const canBuild = this.buildingManager.canBuild(this.inventory);
+
+    EventBus.emit('show-build-menu', {
+      stageName: next.name,
+      stageNumber: this.buildingManager.stage + 1,
+      totalStages: BUILDING_STAGES.length,
+      materials,
+      canBuild,
+    });
+  }
+
+  executeBuild() {
+    if (!this.buildingManager || this.buildingManager.isComplete()) return;
+    if (!this.buildingManager.canBuild(this.inventory)) return;
+
+    const newStage = this.buildingManager.build(this.inventory);
+    if (newStage === -1) return;
+
+    // Bounce tween on house sprite
+    this.tweens.add({
+      targets: this.housePlot,
+      scaleX: 1.2,
+      scaleY: 1.2,
+      duration: 150,
+      yoyo: true,
+      ease: 'Sine.easeInOut',
+    });
+
+    // Update depth for new sprite size
+    this.housePlot.setDepth(this.housePlotPosition.y - 24);
+
+    // Star/sparkle particles
+    this.spawnBuildParticles(this.housePlotPosition.x, this.housePlotPosition.y);
+
+    if (this.game.audioManager) {
+      if (this.buildingManager.isComplete()) {
+        this.game.audioManager.playBuildComplete();
+      } else {
+        this.game.audioManager.playBuild();
+      }
+    }
+
+    // Extra celebration for final stage
+    if (this.buildingManager.isComplete()) {
+      this.time.delayedCall(200, () => {
+        this.spawnBuildParticles(this.housePlotPosition.x, this.housePlotPosition.y, true);
+      });
+    }
+
+    // Close the build menu
+    EventBus.emit('close-build-menu');
+  }
+
+  spawnBuildParticles(x, y, large) {
+    const count = large ? 16 : 8;
+    const spread = large ? 50 : 30;
+
+    for (let i = 0; i < count; i++) {
+      const angle = (i / count) * Math.PI * 2;
+      const dist = spread + Math.random() * 20;
+      const tx = x + Math.cos(angle) * dist;
+      const ty = y + Math.sin(angle) * dist - 20;
+
+      const tex = Math.random() > 0.5 ? 'particle-star' : 'particle-sparkle';
+      const star = this.add.image(x, y - 10, tex);
+      star.setDepth(10000);
+      star.setScale(large ? 1.2 : 0.8);
+
+      this.tweens.add({
+        targets: star,
+        x: tx,
+        y: ty,
+        alpha: 0,
+        scaleX: 0.2,
+        scaleY: 0.2,
+        duration: 600 + Math.random() * 300,
+        ease: 'Power2',
+        onComplete: () => star.destroy(),
+      });
+    }
   }
 
   getTappedCollectible(worldX, worldY) {

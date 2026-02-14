@@ -17,7 +17,7 @@ export const ANIMALS = {
 
 export const BUILDING_STAGES = [
   { name: 'Floor',  cost: { planks: 3 } },
-  { name: 'Walls',  cost: { planks: 4, stones: 3 } },
+  { name: 'Walls',  cost: { planks: 3, stones: 3 } },
   { name: 'Roof',   cost: { straw: 3 } },
   { name: 'Door',   cost: { planks: 2 } },
   { name: 'Window', cost: { stones: 2 } },

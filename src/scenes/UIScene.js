@@ -1,4 +1,4 @@
-import { INVENTORY_SIZE } from '../config.js';
+import { INVENTORY_SIZE, BUILDING_STAGES } from '../config.js';
 import EventBus from '../utils/EventBus.js';
 
 export default class UIScene extends Phaser.Scene {
@@ -60,6 +60,10 @@ export default class UIScene extends Phaser.Scene {
     // Map of animalId → { container, timer }
     this.thoughtBubbles = new Map();
 
+    // ─── Build menu ───
+    this.buildMenuVisible = false;
+    this.buildMenuElements = [];
+
     // ─── EventBus Listeners ───
 
     EventBus.on('inventory-changed', this.onInventoryChanged, this);
@@ -72,6 +76,8 @@ export default class UIScene extends Phaser.Scene {
     EventBus.on('taming-progress', this.onTamingProgress, this);
     EventBus.on('show-thought-bubble', this.onShowThoughtBubble, this);
     EventBus.on('animal-tamed', this.onAnimalTamed, this);
+    EventBus.on('show-build-menu', this.onShowBuildMenu, this);
+    EventBus.on('close-build-menu', this.onCloseBuildMenu, this);
 
     // Store layout info
     this.barX = barX;
@@ -85,6 +91,8 @@ export default class UIScene extends Phaser.Scene {
       EventBus.off('taming-progress', this.onTamingProgress, this);
       EventBus.off('show-thought-bubble', this.onShowThoughtBubble, this);
       EventBus.off('animal-tamed', this.onAnimalTamed, this);
+      EventBus.off('show-build-menu', this.onShowBuildMenu, this);
+      EventBus.off('close-build-menu', this.onCloseBuildMenu, this);
     });
   }
 
@@ -308,5 +316,155 @@ export default class UIScene extends Phaser.Scene {
     const sx = this.barX + index * (this.SLOT_SIZE + this.SLOT_GAP) + this.SLOT_SIZE / 2;
     const sy = this.barY + this.SLOT_SIZE / 2;
     this.highlight.setPosition(sx, sy);
+  }
+
+  // ─── Build menu ───
+
+  onShowBuildMenu(data) {
+    // Remove any existing menu first
+    this.destroyBuildMenu();
+
+    this.buildMenuVisible = true;
+    const { stageName, stageNumber, totalStages, materials, canBuild } = data;
+
+    const cx = 512;
+    const cy = 340;
+    const panelW = 280;
+    const panelH = 220;
+
+    // Dim overlay (tap to close)
+    const overlay = this.add.rectangle(512, 384, 1024, 768, 0x000000, 0.4);
+    overlay.setDepth(200);
+    overlay.setScrollFactor(0);
+    overlay.setInteractive();
+    overlay.on('pointerdown', () => this.onCloseBuildMenu());
+    this.buildMenuElements.push(overlay);
+
+    // Panel background
+    const panel = this.add.rectangle(cx, cy, panelW, panelH, 0x2a1a0e, 0.92);
+    panel.setDepth(201);
+    panel.setScrollFactor(0);
+    panel.setStrokeStyle(3, 0x8B6914);
+    this.buildMenuElements.push(panel);
+
+    // Title: "Build: Floor (1/5)"
+    const title = this.add.text(cx, cy - panelH / 2 + 22, `Build: ${stageName}`, {
+      fontSize: '18px',
+      fontFamily: 'monospace',
+      color: '#FFD700',
+      align: 'center',
+    });
+    title.setOrigin(0.5, 0.5);
+    title.setDepth(202);
+    title.setScrollFactor(0);
+    this.buildMenuElements.push(title);
+
+    // Stage progress text
+    const progress = this.add.text(cx, cy - panelH / 2 + 44, `Stage ${stageNumber} of ${totalStages}`, {
+      fontSize: '12px',
+      fontFamily: 'monospace',
+      color: '#BBBBBB',
+      align: 'center',
+    });
+    progress.setOrigin(0.5, 0.5);
+    progress.setDepth(202);
+    progress.setScrollFactor(0);
+    this.buildMenuElements.push(progress);
+
+    // Material rows
+    const materialEntries = Object.entries(materials);
+    const rowStartY = cy - 20;
+    const rowSpacing = 36;
+
+    for (let i = 0; i < materialEntries.length; i++) {
+      const [itemType, { have, need }] = materialEntries[i];
+      const rowY = rowStartY + i * rowSpacing;
+
+      // Item icon
+      const icon = this.add.image(cx - 80, rowY, `item-${itemType}`);
+      icon.setDepth(202);
+      icon.setScrollFactor(0);
+      this.buildMenuElements.push(icon);
+
+      // Item name
+      const nameLabel = this.add.text(cx - 50, rowY, itemType.charAt(0).toUpperCase() + itemType.slice(1), {
+        fontSize: '14px',
+        fontFamily: 'monospace',
+        color: '#FFFFFF',
+      });
+      nameLabel.setOrigin(0, 0.5);
+      nameLabel.setDepth(202);
+      nameLabel.setScrollFactor(0);
+      this.buildMenuElements.push(nameLabel);
+
+      // Count: "have / need" — green if enough, red if not
+      const enough = have >= need;
+      const countText = this.add.text(cx + 80, rowY, `${have} / ${need}`, {
+        fontSize: '14px',
+        fontFamily: 'monospace',
+        color: enough ? '#4CAF50' : '#FF6B6B',
+        align: 'right',
+      });
+      countText.setOrigin(0.5, 0.5);
+      countText.setDepth(202);
+      countText.setScrollFactor(0);
+      this.buildMenuElements.push(countText);
+    }
+
+    // Build button
+    const btnY = cy + panelH / 2 - 34;
+    const btnTex = canBuild ? 'ui-build-btn' : 'ui-build-btn-off';
+
+    const btn = this.add.image(cx, btnY, btnTex);
+    btn.setDepth(202);
+    btn.setScrollFactor(0);
+    this.buildMenuElements.push(btn);
+
+    const btnLabel = this.add.text(cx, btnY, canBuild ? 'Build!' : 'Need more', {
+      fontSize: '13px',
+      fontFamily: 'monospace',
+      color: '#FFFFFF',
+      align: 'center',
+    });
+    btnLabel.setOrigin(0.5, 0.5);
+    btnLabel.setDepth(203);
+    btnLabel.setScrollFactor(0);
+    this.buildMenuElements.push(btnLabel);
+
+    if (canBuild) {
+      btn.setInteractive(
+        new Phaser.Geom.Rectangle(-24, -8, 48 + 48, 16 + 16),
+        Phaser.Geom.Rectangle.Contains
+      );
+      btn.on('pointerdown', () => {
+        EventBus.emit('do-build');
+      });
+    }
+
+    // Animate in
+    for (const el of this.buildMenuElements) {
+      if (el !== overlay) {
+        el.setAlpha(0);
+        this.tweens.add({
+          targets: el,
+          alpha: el === panel ? 0.92 : 1,
+          duration: 150,
+          ease: 'Power2',
+        });
+      }
+    }
+  }
+
+  onCloseBuildMenu() {
+    if (!this.buildMenuVisible) return;
+    this.destroyBuildMenu();
+  }
+
+  destroyBuildMenu() {
+    for (const el of this.buildMenuElements) {
+      el.destroy();
+    }
+    this.buildMenuElements = [];
+    this.buildMenuVisible = false;
   }
 }
