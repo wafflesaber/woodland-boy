@@ -53,6 +53,7 @@ export default class SpriteFactory {
     this.generateItems();
     this.generateTerrain();
     this.generateDecorations();
+    this.generateBridge();
     this.generateHouseStages();
     this.generateUI();
     this.generateParticles();
@@ -585,6 +586,34 @@ export default class SpriteFactory {
       ['#9370DB', '#FFD700', '#9370DB'],
       [_, Fs, _],
     ]);
+  }
+
+  // ─── BRIDGE (16x16 = 64x64) ───
+
+  generateBridge() {
+    const Pw = '#C4A06A'; // plank wood
+    const Pd = '#A68050'; // plank dark grain
+    const Pl = '#DEB887'; // plank light
+    const Rl = '#8B7355'; // rail
+    const Wt = '#4682B4'; // water peek-through
+    // Horizontal planks with side rails, water visible at edges
+    const grid = [];
+    for (let y = 0; y < 16; y++) {
+      grid[y] = [];
+      for (let x = 0; x < 16; x++) {
+        if (x === 0 || x === 15) {
+          // Side rails
+          grid[y][x] = Rl;
+        } else if (y % 4 === 3) {
+          // Gap between planks — water shows through
+          grid[y][x] = Wt;
+        } else {
+          // Wood plank with occasional grain
+          grid[y][x] = ((x + y) % 5 === 0) ? Pd : ((x * y) % 7 === 0) ? Pl : Pw;
+        }
+      }
+    }
+    this.tex('terrain-bridge', grid);
   }
 
   // ─── HOUSE STAGES (12x12 = 48x48) ───

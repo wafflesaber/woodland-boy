@@ -14,19 +14,22 @@ export default class MapGenerator {
     // Track occupied cells to prevent overlap: grid[row][col] = true if blocked
     this.occupied = Array.from({ length: this.rows }, () => Array(this.cols).fill(false));
 
-    // 1. Clearings (reserve before placing anything else)
-    const clearings = this.generateClearings();
-
-    // 2. River path
+    // 1. River path (compute first so we can place the bridge)
     const riverCells = this.generateRiverPath();
 
-    // 3. Grass base + river + sand banks
-    this.layTerrain(riverCells, clearings);
+    // 2. Clearings
+    const clearings = this.generateClearings();
 
-    // 4. Dirt in clearings
+    // 3. Bridge across the river
+    const bridgeCells = this.placeBridge(riverCells);
+
+    // 4. Grass base + river + sand banks + bridge
+    this.layTerrain(riverCells, clearings, bridgeCells);
+
+    // 5. Dirt in clearings
     this.layClearing(clearings);
 
-    // 5. Trees
+    // 6. Trees
     const trees = this.placeTrees(clearings, riverCells);
 
     // 6. Bushes (some are berry bushes)
@@ -75,14 +78,6 @@ export default class MapGenerator {
     return false;
   }
 
-  isNearClearing(col, row, clearings, margin) {
-    for (const c of clearings) {
-      if (col >= c.left - margin && col <= c.right + margin &&
-          row >= c.top - margin && row <= c.bottom + margin) return true;
-    }
-    return false;
-  }
-
   isInRiver(col, row, riverCells) {
     return riverCells.has(`${col},${row}`);
   }
@@ -95,7 +90,7 @@ export default class MapGenerator {
 
   generateClearings() {
     const clearings = [];
-    const attempts = [
+    const placements = [
       // House plot — center-ish area
       { preferCol: Math.floor(this.cols * 0.3), preferRow: Math.floor(this.rows * 0.5) },
       // Second clearing — upper right
@@ -104,7 +99,7 @@ export default class MapGenerator {
       { preferCol: Math.floor(this.cols * 0.5), preferRow: Math.floor(this.rows * 0.8) },
     ];
 
-    for (const { preferCol, preferRow } of attempts) {
+    for (const { preferCol, preferRow } of placements) {
       const w = 5 + Math.floor(Math.random() * 2); // 5-6 tiles wide
       const h = 5 + Math.floor(Math.random() * 2); // 5-6 tiles tall
       const left = Math.max(1, Math.min(preferCol - Math.floor(w / 2), this.cols - w - 1));
@@ -161,9 +156,45 @@ export default class MapGenerator {
     return riverCells;
   }
 
-  // ─── 3. Lay terrain tiles ───
+  // ─── 3. Bridge ───
 
-  layTerrain(riverCells, clearings) {
+  placeBridge(riverCells) {
+    const bridgeCells = new Set();
+
+    // Pick a row in the middle third of the map
+    const minRow = Math.floor(this.rows * 0.3);
+    const maxRow = Math.floor(this.rows * 0.7);
+
+    // Find a row that has river cells (try center first, then scan outward)
+    let bestRow = Math.floor((minRow + maxRow) / 2);
+    for (let offset = 0; offset < maxRow - minRow; offset++) {
+      const tryRow = bestRow + (offset % 2 === 0 ? offset / 2 : -Math.ceil(offset / 2));
+      if (tryRow < minRow || tryRow > maxRow) continue;
+
+      let hasRiver = false;
+      for (let col = 0; col < this.cols; col++) {
+        if (riverCells.has(`${col},${tryRow}`)) { hasRiver = true; break; }
+      }
+      if (hasRiver) { bestRow = tryRow; break; }
+    }
+
+    // Collect all river cells at bestRow and one row above/below for a 3-tile-wide bridge
+    for (let dr = -1; dr <= 1; dr++) {
+      const row = bestRow + dr;
+      if (row < 0 || row >= this.rows) continue;
+      for (let col = 0; col < this.cols; col++) {
+        if (riverCells.has(`${col},${row}`)) {
+          bridgeCells.add(`${col},${row}`);
+        }
+      }
+    }
+
+    return bridgeCells;
+  }
+
+  // ─── 4. Lay terrain tiles ───
+
+  layTerrain(riverCells, clearings, bridgeCells) {
     // Build a set of sand bank cells (adjacent to river but not in river)
     const sandCells = new Set();
     for (const key of riverCells) {
@@ -183,14 +214,13 @@ export default class MapGenerator {
         const wx = col * TILE_SIZE + TILE_SIZE / 2;
         const wy = row * TILE_SIZE + TILE_SIZE / 2;
         const key = `${col},${row}`;
-        const nearClearing = this.isNearClearing(col, row, clearings, 1);
 
         let texKey;
-        if (riverCells.has(key) && !nearClearing) {
+        if (bridgeCells.has(key)) {
+          // Bridge tile — walkable plank over water
+          texKey = 'terrain-bridge';
+        } else if (riverCells.has(key)) {
           texKey = `terrain-water-${Math.floor(Math.random() * 3)}`;
-        } else if (riverCells.has(key) && nearClearing) {
-          // River inside/adjacent to a clearing — render as sand (ford crossing)
-          texKey = 'terrain-sand';
         } else if (sandCells.has(key)) {
           texKey = 'terrain-sand';
         } else {
@@ -201,10 +231,10 @@ export default class MapGenerator {
       }
     }
 
-    // River collision: block water tiles, but NOT those inside or adjacent to clearings
+    // River collision: block water tiles, but NOT bridge cells
     for (const key of riverCells) {
+      if (bridgeCells.has(key)) continue;
       const [col, row] = key.split(',').map(Number);
-      if (this.isNearClearing(col, row, clearings, 1)) continue;
       const wx = col * TILE_SIZE + TILE_SIZE / 2;
       const wy = row * TILE_SIZE + TILE_SIZE / 2;
       const blocker = this.scene.add.zone(wx, wy, TILE_SIZE, TILE_SIZE);
