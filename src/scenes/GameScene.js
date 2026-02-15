@@ -1,4 +1,4 @@
-import { WORLD_WIDTH, WORLD_HEIGHT, TILE_SIZE, ITEM_SPAWN_COUNTS, ITEM_RESPAWN_TIME, INTERACTION_RANGE, ANIMALS, BUILDING_STAGES } from '../config.js';
+import { WORLD_WIDTH, WORLD_HEIGHT, TILE_SIZE, ITEM_SPAWN_COUNTS, ITEM_RESPAWN_TIME, INTERACTION_RANGE, ANIMALS, PORTAL_STAGES, PORTAL_ACTIVATION_RANGE } from '../config.js';
 import MapGenerator from '../systems/MapGenerator.js';
 import Player from '../entities/Player.js';
 import Collectible from '../entities/Collectible.js';
@@ -24,12 +24,16 @@ export default class GameScene extends Phaser.Scene {
     const startClearing = this.mapData.clearings[0];
     this.player = new Player(this, startClearing.cx, startClearing.cy - 100);
 
-    // ─── House plot (player chooses which clearing) ───
-    this.housePlotChosen = false;
-    this.housePlotPosition = null;
-    this.housePlot = null;
-    this.buildingManager = null;
-    this.pendingHouseTarget = false;
+    // ─── Portal plot (player chooses which clearing) ───
+    this.portalPlotChosen = false;
+    this.portalPlotPosition = null;
+    this.portalSprite = null;
+    this.portalManager = null;
+    this.pendingPortalTarget = false;
+    this.portalSwirlTimer = 0;
+    this.portalSwirlFrame = 0;
+    this.portalSparkleTimer = 0;
+    this.portalSparkles = [];
 
     // Player vs obstacles
     this.physics.add.collider(this.player, this.mapData.obstacles);
@@ -47,7 +51,7 @@ export default class GameScene extends Phaser.Scene {
     });
 
     EventBus.on('do-build', () => {
-      this.executeBuild();
+      this.executePortalBuild();
     });
 
     EventBus.on('drop-item', (index) => {
@@ -95,19 +99,19 @@ export default class GameScene extends Phaser.Scene {
       // Clear pending targets
       this.pendingCollectTarget = null;
       this.pendingAnimalTarget = null;
-      this.pendingHouseTarget = false;
+      this.pendingPortalTarget = false;
 
-      // Check if the player tapped inside a clearing to place their house
-      if (!this.housePlotChosen) {
+      // Check if the player tapped inside a clearing to place their portal
+      if (!this.portalPlotChosen) {
         const clearing = this.getTappedClearing(worldX, worldY);
         if (clearing) {
-          this.placeHousePlot(clearing);
+          this.placePortalPlot(clearing);
           return;
         }
       }
 
-      // Check if the player tapped on a collectible (BEFORE house check
-      // so items near the house plot can still be picked up)
+      // Check if the player tapped on a collectible (BEFORE portal check
+      // so items near the portal plot can still be picked up)
       const tappedItem = this.getTappedCollectible(worldX, worldY);
       if (tappedItem) {
         const dist = Phaser.Math.Distance.Between(
@@ -133,8 +137,6 @@ export default class GameScene extends Phaser.Scene {
           this.handleAnimalInteraction(tappedAnimal);
         } else {
           // Show thought bubble hint immediately for tameable animals
-          // so the player sees what it wants even if it's shy and flees.
-          // Pinned so it stays put instead of chasing a fleeing animal offscreen.
           if (tappedAnimal.config.tameable && !tappedAnimal.tamed) {
             const favoriteFood = tappedAnimal.config.favoriteFood;
             EventBus.emit('show-thought-bubble', {
@@ -153,18 +155,18 @@ export default class GameScene extends Phaser.Scene {
         return;
       }
 
-      // Check if tapped the house plot (for building)
-      if (this.housePlotChosen && this.housePlot && this.buildingManager && !this.buildingManager.isComplete()) {
-        const distToHouse = Phaser.Math.Distance.Between(worldX, worldY, this.housePlotPosition.x, this.housePlotPosition.y);
-        if (distToHouse < 100) {
+      // Check if tapped the portal plot (for building)
+      if (this.portalPlotChosen && this.portalSprite && this.portalManager && !this.portalManager.isComplete()) {
+        const distToPortal = Phaser.Math.Distance.Between(worldX, worldY, this.portalPlotPosition.x, this.portalPlotPosition.y);
+        if (distToPortal < 100) {
           const distPlayer = Phaser.Math.Distance.Between(
-            this.player.x, this.player.y, this.housePlotPosition.x, this.housePlotPosition.y
+            this.player.x, this.player.y, this.portalPlotPosition.x, this.portalPlotPosition.y
           );
           if (distPlayer <= INTERACTION_RANGE) {
-            this.openBuildMenu();
+            this.openPortalMenu();
           } else {
-            this.pendingHouseTarget = true;
-            this.player.moveTo(this.housePlotPosition.x, this.housePlotPosition.y);
+            this.pendingPortalTarget = true;
+            this.player.moveTo(this.portalPlotPosition.x, this.portalPlotPosition.y);
           }
           return;
         }
@@ -182,11 +184,14 @@ export default class GameScene extends Phaser.Scene {
       for (const timer of this.respawnTimers) {
         timer.remove(false);
       }
-      // Clean up ambient particles
       for (const p of this.ambientParticles) {
         if (p && p.active) p.destroy();
       }
       this.ambientParticles = [];
+      for (const p of this.portalSparkles) {
+        if (p && p.active) p.destroy();
+      }
+      this.portalSparkles = [];
       this.waterTiles = [];
     });
   }
@@ -203,11 +208,9 @@ export default class GameScene extends Phaser.Scene {
     }
 
     // ─── Water shimmer: staggered texture cycling ───
-    // Update ~20 tiles per frame spread over time instead of all 100+ at once
     this.waterShimmerTimer += delta;
     if (this.waterShimmerTimer > 50 && this.waterTiles.length > 0) {
       this.waterShimmerTimer = 0;
-      // Each frame, randomly retexture a few water tiles
       const count = Math.min(5, this.waterTiles.length);
       for (let i = 0; i < count; i++) {
         const idx = Math.floor(Math.random() * this.waterTiles.length);
@@ -232,6 +235,32 @@ export default class GameScene extends Phaser.Scene {
       this.spawnTamedSparkle();
     }
 
+    // ─── Portal swirl animation (when complete) ───
+    if (this.portalManager && this.portalManager.isComplete() && this.portalSprite) {
+      this.portalSwirlTimer += delta;
+      if (this.portalSwirlTimer > 200) {
+        this.portalSwirlTimer = 0;
+        this.portalSwirlFrame = (this.portalSwirlFrame + 1) % 3;
+        const textures = ['portal-stage-3', 'portal-active-1', 'portal-active-2'];
+        this.portalSprite.setTexture(textures[this.portalSwirlFrame]);
+      }
+
+      // Portal sparkles
+      this.portalSparkleTimer += delta;
+      if (this.portalSparkleTimer > 400) {
+        this.portalSparkleTimer = 0;
+        this.spawnPortalSparkle();
+      }
+
+      // Check if player walks into completed portal
+      const distToPortal = Phaser.Math.Distance.Between(
+        this.player.x, this.player.y, this.portalPlotPosition.x, this.portalPlotPosition.y
+      );
+      if (distToPortal <= PORTAL_ACTIVATION_RANGE) {
+        this.enterPortal();
+      }
+    }
+
     // Check pending collect target
     if (this.pendingCollectTarget) {
       const target = this.pendingCollectTarget;
@@ -248,16 +277,16 @@ export default class GameScene extends Phaser.Scene {
       }
     }
 
-    // Check pending house target
-    if (this.pendingHouseTarget && this.housePlotPosition) {
+    // Check pending portal target
+    if (this.pendingPortalTarget && this.portalPlotPosition) {
       const dist = Phaser.Math.Distance.Between(
-        this.player.x, this.player.y, this.housePlotPosition.x, this.housePlotPosition.y
+        this.player.x, this.player.y, this.portalPlotPosition.x, this.portalPlotPosition.y
       );
       if (dist <= INTERACTION_RANGE) {
-        this.pendingHouseTarget = false;
+        this.pendingPortalTarget = false;
         this.player.target = null;
         this.player.body.setVelocity(0, 0);
-        this.openBuildMenu();
+        this.openPortalMenu();
       }
     }
 
@@ -273,7 +302,6 @@ export default class GameScene extends Phaser.Scene {
         if (dist <= INTERACTION_RANGE) {
           this.handleAnimalInteraction(target);
           this.pendingAnimalTarget = null;
-          // Stop player from continuing past the animal
           this.player.target = null;
           this.player.body.setVelocity(0, 0);
         }
@@ -292,7 +320,6 @@ export default class GameScene extends Phaser.Scene {
     const favoriteFood = animal.config.favoriteFood;
 
     if (!selectedItem || selectedItem !== favoriteFood) {
-      // Wrong item or no item — show thought bubble hint
       EventBus.emit('show-thought-bubble', {
         animalId: animal.animalId,
         worldX: animal.x,
@@ -310,20 +337,15 @@ export default class GameScene extends Phaser.Scene {
   }
 
   feedAnimal(animal) {
-    // Consume item
     this.inventory.consumeSelected();
 
-    // Init taming progress on first feed
     this.tamingManager.initAnimal(animal.animalId, animal.config.requiredFeedings);
 
-    // Animal enters feeding state
     animal.enterFeeding(1500);
 
-    // Stop player movement so tween doesn't fight physics
     this.player.target = null;
     this.player.body.setVelocity(0, 0);
 
-    // Brief scale-based "offering" pulse (visual only, no position change)
     this.tweens.add({
       targets: this.player,
       scaleX: 1.15,
@@ -337,14 +359,11 @@ export default class GameScene extends Phaser.Scene {
       this.game.audioManager.playFeed();
     }
 
-    // Heart particle rising above animal
     this.spawnHeartParticle(animal.x, animal.y - 20);
 
-    // Increment feeding progress
     const result = this.tamingManager.feed(animal.animalId);
     const progress = this.tamingManager.getProgress(animal.animalId);
 
-    // Tell UIScene about the progress
     EventBus.emit('taming-progress', {
       animalId: animal.animalId,
       worldX: animal.x,
@@ -354,7 +373,6 @@ export default class GameScene extends Phaser.Scene {
     });
 
     if (result === 'tamed') {
-      // Delay celebration until feeding pause ends
       this.time.delayedCall(1500, () => {
         this.tameAnimal(animal);
       });
@@ -367,7 +385,6 @@ export default class GameScene extends Phaser.Scene {
 
     animal.setTamed(index);
 
-    // Burst of heart particles
     for (let i = 0; i < 10; i++) {
       const angle = (i / 10) * Math.PI * 2;
       const burstDist = 20 + Math.random() * 20;
@@ -427,9 +444,9 @@ export default class GameScene extends Phaser.Scene {
   }
 
   spawnCollectible(x, y, itemType) {
-    // Don't spawn on top of the house plot
-    if (this.housePlotPosition) {
-      const dist = Phaser.Math.Distance.Between(x, y, this.housePlotPosition.x, this.housePlotPosition.y);
+    // Don't spawn on top of the portal plot
+    if (this.portalPlotPosition) {
+      const dist = Phaser.Math.Distance.Between(x, y, this.portalPlotPosition.x, this.portalPlotPosition.y);
       if (dist < 90) return null;
     }
     const item = new Collectible(this, x, y, itemType);
@@ -443,13 +460,11 @@ export default class GameScene extends Phaser.Scene {
 
     this.inventory.remove(index);
 
-    // Spawn a real collectible on the ground near the player
     const offsetX = (Math.random() - 0.5) * 60;
     const offsetY = 20 + Math.random() * 20;
     const dropX = this.player.x + offsetX;
     const dropY = this.player.y + offsetY;
 
-    // Brief toss animation, then spawn the real item
     const tossed = this.add.image(this.player.x, this.player.y - 10, `item-${itemType}`);
     tossed.setDepth(10000);
     tossed.setScale(0.8);
@@ -525,26 +540,25 @@ export default class GameScene extends Phaser.Scene {
     return null;
   }
 
-  placeHousePlot(clearing) {
-    this.housePlotChosen = true;
-    this.housePlotPosition = { x: clearing.cx, y: clearing.cy };
+  placePortalPlot(clearing) {
+    this.portalPlotChosen = true;
+    this.portalPlotPosition = { x: clearing.cx, y: clearing.cy };
 
-    // House scale: ~half the clearing size (clearing is ~384x320px, house base is 48x48)
-    this.houseScale = 3.5;
+    this.portalScale = 3.5;
 
-    this.housePlot = this.add.image(clearing.cx, clearing.cy, 'house-stage-0');
-    this.housePlot.setDepth(clearing.cy - 24);
+    this.portalSprite = this.add.image(clearing.cx, clearing.cy, 'portal-stage-0');
+    this.portalSprite.setDepth(clearing.cy - 24);
 
-    this.housePlot.setScale(0);
+    this.portalSprite.setScale(0);
     this.tweens.add({
-      targets: this.housePlot,
-      scaleX: this.houseScale,
-      scaleY: this.houseScale,
+      targets: this.portalSprite,
+      scaleX: this.portalScale,
+      scaleY: this.portalScale,
       duration: 400,
       ease: 'Back.easeOut',
     });
 
-    // Remove any collectibles overlapping the house plot
+    // Remove any collectibles overlapping the portal plot
     for (const item of this.collectiblesGroup.getChildren()) {
       if (!item.active) continue;
       const dist = Phaser.Math.Distance.Between(clearing.cx, clearing.cy, item.x, item.y);
@@ -554,79 +568,132 @@ export default class GameScene extends Phaser.Scene {
     }
 
     // Create building manager now that we know the position
-    this.buildingManager = new BuildingManager(this, clearing.cx, clearing.cy);
-    this.buildingManager.houseSprite = this.housePlot;
+    this.portalManager = new BuildingManager(this, clearing.cx, clearing.cy);
+    this.portalManager.portalSprite = this.portalSprite;
   }
 
-  // ─── Building ───
+  // ─── Portal Building ───
 
-  openBuildMenu() {
-    if (!this.buildingManager || this.buildingManager.isComplete()) return;
+  openPortalMenu() {
+    if (!this.portalManager || this.portalManager.isComplete()) return;
 
-    const next = this.buildingManager.getNextStageCost();
+    const next = this.portalManager.getNextStageCost();
     if (!next) return;
 
-    // Gather current material counts for the UI
     const materials = {};
     for (const [itemType, needed] of Object.entries(next.cost)) {
       materials[itemType] = { have: this.inventory.countOf(itemType), need: needed };
     }
 
-    const canBuild = this.buildingManager.canBuild(this.inventory);
+    const canBuild = this.portalManager.canBuild(this.inventory);
 
     EventBus.emit('show-build-menu', {
       stageName: next.name,
-      stageNumber: this.buildingManager.stage + 1,
-      totalStages: BUILDING_STAGES.length,
+      stageNumber: this.portalManager.stage + 1,
+      totalStages: PORTAL_STAGES.length,
       materials,
       canBuild,
     });
   }
 
-  executeBuild() {
-    if (!this.buildingManager || this.buildingManager.isComplete()) return;
-    if (!this.buildingManager.canBuild(this.inventory)) return;
+  executePortalBuild() {
+    if (!this.portalManager || this.portalManager.isComplete()) return;
+    if (!this.portalManager.canBuild(this.inventory)) return;
 
-    const newStage = this.buildingManager.build(this.inventory);
+    const newStage = this.portalManager.build(this.inventory);
     if (newStage === -1) return;
 
-    // Bounce tween on house sprite
-    const s = this.houseScale || 3.5;
+    // Bounce tween on portal sprite
+    const s = this.portalScale || 3.5;
     this.tweens.add({
-      targets: this.housePlot,
+      targets: this.portalSprite,
       scaleX: s * 1.15,
       scaleY: s * 1.15,
       duration: 150,
       yoyo: true,
       ease: 'Sine.easeInOut',
       onComplete: () => {
-        this.housePlot.setScale(s);
+        this.portalSprite.setScale(s);
       },
     });
 
-    // Update depth for new sprite size
-    this.housePlot.setDepth(this.housePlotPosition.y - 24);
+    this.portalSprite.setDepth(this.portalPlotPosition.y - 24);
 
     // Star/sparkle particles
-    this.spawnBuildParticles(this.housePlotPosition.x, this.housePlotPosition.y);
+    this.spawnBuildParticles(this.portalPlotPosition.x, this.portalPlotPosition.y);
 
     if (this.game.audioManager) {
-      if (this.buildingManager.isComplete()) {
-        this.game.audioManager.playBuildComplete();
+      if (this.portalManager.isComplete()) {
+        this.game.audioManager.playPortalActivate();
       } else {
         this.game.audioManager.playBuild();
       }
     }
 
-    // Extra celebration for final stage
-    if (this.buildingManager.isComplete()) {
+    // Extra celebration for final stage (portal activation)
+    if (this.portalManager.isComplete()) {
       this.time.delayedCall(200, () => {
-        this.spawnBuildParticles(this.housePlotPosition.x, this.housePlotPosition.y, true);
+        this.spawnBuildParticles(this.portalPlotPosition.x, this.portalPlotPosition.y, true);
       });
     }
 
-    // Close the build menu
     EventBus.emit('close-build-menu');
+  }
+
+  // ─── Portal enter (Phase 8 placeholder) ───
+
+  enterPortal() {
+    // Prevent re-entry
+    if (this._portalEntered) return;
+    this._portalEntered = true;
+
+    // Stop player
+    this.player.target = null;
+    this.player.body.setVelocity(0, 0);
+
+    if (this.game.audioManager) {
+      this.game.audioManager.playPortalEnter();
+    }
+
+    // Big celebration burst
+    this.spawnBuildParticles(this.portalPlotPosition.x, this.portalPlotPosition.y, true);
+    this.time.delayedCall(300, () => {
+      this.spawnBuildParticles(this.portalPlotPosition.x, this.portalPlotPosition.y, true);
+    });
+
+    // TODO Phase 9: fade camera, serialize tamed animals, switch biome, restart scene
+  }
+
+  // ─── Portal sparkles (around completed portal) ───
+
+  spawnPortalSparkle() {
+    this.portalSparkles = this.portalSparkles.filter(p => p && p.active);
+    if (this.portalSparkles.length >= 6) return;
+    if (!this.portalPlotPosition) return;
+
+    const angle = Math.random() * Math.PI * 2;
+    const radius = 30 + Math.random() * 40;
+    const x = this.portalPlotPosition.x + Math.cos(angle) * radius;
+    const y = this.portalPlotPosition.y + Math.sin(angle) * radius;
+
+    const sparkle = this.add.image(x, y, 'particle-sparkle');
+    sparkle.setDepth(10000);
+    sparkle.setScale(0.4 + Math.random() * 0.3);
+    sparkle.setAlpha(0.7);
+    sparkle.setTint(0xBB66FF); // purple tint
+
+    this.portalSparkles.push(sparkle);
+
+    this.tweens.add({
+      targets: sparkle,
+      y: sparkle.y - 25,
+      alpha: 0,
+      scaleX: 0.1,
+      scaleY: 0.1,
+      duration: 600 + Math.random() * 400,
+      ease: 'Power2',
+      onComplete: () => sparkle.destroy(),
+    });
   }
 
   spawnBuildParticles(x, y, large) {
@@ -661,26 +728,22 @@ export default class GameScene extends Phaser.Scene {
   // ─── Ambient particles ───
 
   spawnAmbientParticle() {
-    // Cap active ambient particles to prevent unbounded growth
     this.ambientParticles = this.ambientParticles.filter(p => p && p.active);
     if (this.ambientParticles.length >= 4) return;
 
     const cam = this.cameras.main;
-    // Spawn just off the right side of the viewport
     const startX = cam.scrollX + 1024 + 20;
     const startY = cam.scrollY + 100 + Math.random() * 500;
     const endX = cam.scrollX - 40;
     const endY = startY + (Math.random() - 0.3) * 200;
 
-    // Alternate between leaf and butterfly visuals
     const tex = Math.random() > 0.5 ? 'particle-sparkle' : 'particle-star';
     const particle = this.add.image(startX, startY, tex);
     particle.setDepth(9000);
     particle.setAlpha(0.6);
     particle.setScale(0.5 + Math.random() * 0.4);
-    // Tint green for leaf, or pink/yellow for butterfly
     if (Math.random() > 0.5) {
-      particle.setTint(0x88CC44); // leaf green
+      particle.setTint(0x88CC44);
     } else {
       particle.setTint(Phaser.Display.Color.GetColor(
         200 + Math.floor(Math.random() * 55),
@@ -689,10 +752,8 @@ export default class GameScene extends Phaser.Scene {
       ));
     }
 
-    // Track for cleanup
     this.ambientParticles.push(particle);
 
-    // Use a random phase offset so oscillation isn't tied to wall-clock time
     const phaseOffset = Math.random() * Math.PI * 2;
 
     this.tweens.add({
@@ -703,7 +764,6 @@ export default class GameScene extends Phaser.Scene {
       duration: 6000 + Math.random() * 3000,
       ease: 'Sine.easeInOut',
       onUpdate: (tween) => {
-        // Gentle vertical oscillation for drifting feel
         particle.y += Math.sin(tween.elapsed * 0.003 + phaseOffset) * 0.3;
       },
       onComplete: () => {

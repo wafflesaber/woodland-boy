@@ -1,4 +1,4 @@
-import { INVENTORY_SIZE, BUILDING_STAGES } from '../config.js';
+import { INVENTORY_SIZE } from '../config.js';
 import EventBus from '../utils/EventBus.js';
 
 export default class UIScene extends Phaser.Scene {

@@ -54,7 +54,7 @@ export default class SpriteFactory {
     this.generateTerrain();
     this.generateDecorations();
     this.generateBridge();
-    this.generateHouseStages();
+    this.generatePortalStages();
     this.generateUI();
     this.generateParticles();
   }
@@ -618,121 +618,115 @@ export default class SpriteFactory {
     this.tex('terrain-bridge', grid);
   }
 
-  // ─── HOUSE STAGES (12x12 = 48x48) ───
+  // ─── PORTAL STAGES (12x12 = 48x48) ───
 
-  generateHouseStages() {
+  generatePortalStages() {
     const _ = null;
     const Dr = '#DEB887'; // dirt
-    const Pw = '#C4A06A'; // wood planks
-    const Pl = '#DEB887'; // lighter wood
-    const Wd = '#8B4513'; // dark wood walls
-    const Wl = '#A0522D'; // lighter wall
-    const Rf = '#DAA520'; // roof straw
-    const Rd = '#B8860B'; // darker straw
-    const Do = '#654321'; // door
-    const Wb = '#87CEEB'; // window blue
-    const Fl = '#FF6B6B'; // flower
+    const Pp = '#7B2FBE'; // portal purple
+    const Pl = '#9B59B6'; // portal light purple
+    const Pb = '#4A00E0'; // portal blue
+    const Sg = '#A9A9A9'; // stone gray
+    const Sd = '#808080'; // stone dark
+    const Sl = '#C0C0C0'; // stone light
+    const Rn = '#E040FB'; // rune glow (magenta)
+    const Rb = '#7C4DFF'; // rune blue
+    const Pw = '#FFFFFF'; // portal white
+    const Pg = '#CE93D8'; // portal glow soft
 
-    // Stage 0: empty plot — outlined dirt pad with corner stakes and a hammer icon
-    const Bk = '#333333'; // black outline
-    const St = '#8B7355'; // stake / post
-    const Hm = '#888888'; // hammer head
-    const Hh = '#A0714A'; // hammer handle
-    this.tex('house-stage-0', [
+    // Stage 0: Magic circle — purple/blue glowing dots in a circle on dirt
+    this.tex('portal-stage-0', [
       [_, _, _, _, _, _, _, _, _, _, _, _],
       [_, _, _, _, _, _, _, _, _, _, _, _],
       [_, _, _, _, _, _, _, _, _, _, _, _],
+      [_, _, _, _, Pp, Pb, Pb, Pp, _, _, _, _],
+      [_, _, _, Pb, _, _, _, _, Pb, _, _, _],
+      [_, _, _, Pp, _, _, _, _, Pp, _, _, _],
+      [_, _, _, Pp, _, _, _, _, Pp, _, _, _],
+      [_, _, _, Pb, _, _, _, _, Pb, _, _, _],
+      [_, _, _, _, Pp, Pb, Pb, Pp, _, _, _, _],
       [_, _, _, _, _, _, _, _, _, _, _, _],
+      [_, _, _, _, _, Pl, Pl, _, _, _, _, _],
       [_, _, _, _, _, _, _, _, _, _, _, _],
-      [_, _, _, _, _, _, _, _, _, _, _, _],
-      [_, _, _, _, _, Hm, Hm, _, _, _, _, _],
-      [St, Bk, Bk, Bk, Bk, Hh, Bk, Bk, Bk, Bk, Bk, St],
-      [Bk, Dr, Dr, Dr, Dr, Hh, Dr, Dr, Dr, Dr, Dr, Bk],
-      [Bk, Dr, Dr, Dr, Dr, Dr, Dr, Dr, Dr, Dr, Dr, Bk],
-      [Bk, Dr, Dr, Dr, Dr, Dr, Dr, Dr, Dr, Dr, Dr, Bk],
-      [St, Bk, Bk, Bk, Bk, Bk, Bk, Bk, Bk, Bk, Bk, St],
     ]);
 
-    // Stage 1: floor — warm wood planks with visible board lines and nails
-    const Fg = '#B08050'; // floor grain
-    const Fn = '#5C3A1E'; // nail
-    this.tex('house-stage-1', [
+    // Stage 1: Stone base + arch — pillars with curved top
+    this.tex('portal-stage-1', [
+      [_, _, _, _, _, Sg, Sg, _, _, _, _, _],
+      [_, _, _, _, Sg, Sd, Sd, Sg, _, _, _, _],
+      [_, _, _, Sg, Sl, _, _, Sl, Sg, _, _, _],
+      [_, _, _, Sg, _, _, _, _, Sg, _, _, _],
+      [_, _, _, Sg, _, _, _, _, Sg, _, _, _],
+      [_, _, _, Sg, _, _, _, _, Sg, _, _, _],
+      [_, _, _, Sd, _, _, _, _, Sd, _, _, _],
+      [_, _, _, Sg, _, _, _, _, Sg, _, _, _],
+      [_, _, _, Sg, _, _, _, _, Sg, _, _, _],
+      [_, _, Sd, Sg, Sd, Dr, Dr, Sd, Sg, Sd, _, _],
+      [_, _, Sg, Sg, Sg, Dr, Dr, Sg, Sg, Sg, _, _],
       [_, _, _, _, _, _, _, _, _, _, _, _],
-      [_, _, _, _, _, _, _, _, _, _, _, _],
-      [_, _, _, _, _, _, _, _, _, _, _, _],
-      [_, _, _, _, _, _, _, _, _, _, _, _],
-      [_, _, _, _, _, _, _, _, _, _, _, _],
-      [_, _, _, _, _, _, _, _, _, _, _, _],
-      [_, _, _, _, _, _, _, _, _, _, _, _],
-      [_, _, _, _, _, _, _, _, _, _, _, _],
-      [_, Pw, Pl, Pw, Fg, Pw, Pl, Pw, Fg, Pw, Pl, _],
-      [_, Fn, Pw, Pl, Pw, Fn, Pw, Pl, Pw, Fn, Pw, _],
-      [_, Pl, Fg, Pw, Pl, Pw, Fg, Pw, Pl, Pw, Fg, _],
-      [_, Pw, Pl, Fn, Pw, Pl, Pw, Fn, Pw, Pl, Pw, _],
     ]);
 
-    // Stage 2: floor + walls
-    this.tex('house-stage-2', [
+    // Stage 2: Runes + arch — arch with glowing purple/blue rune marks
+    this.tex('portal-stage-2', [
+      [_, _, _, _, _, Rn, Rn, _, _, _, _, _],
+      [_, _, _, _, Sg, Rb, Rb, Sg, _, _, _, _],
+      [_, _, _, Sg, Rn, _, _, Rn, Sg, _, _, _],
+      [_, _, _, Rb, _, _, _, _, Rb, _, _, _],
+      [_, _, _, Sg, _, _, _, _, Sg, _, _, _],
+      [_, _, _, Rn, _, _, _, _, Rn, _, _, _],
+      [_, _, _, Sg, _, _, _, _, Sg, _, _, _],
+      [_, _, _, Rb, _, _, _, _, Rb, _, _, _],
+      [_, _, _, Sg, _, _, _, _, Sg, _, _, _],
+      [_, _, Rn, Sg, Sd, Dr, Dr, Sd, Sg, Rn, _, _],
+      [_, _, Sg, Sg, Sg, Dr, Dr, Sg, Sg, Sg, _, _],
       [_, _, _, _, _, _, _, _, _, _, _, _],
-      [_, _, _, _, _, _, _, _, _, _, _, _],
-      [_, _, _, _, _, _, _, _, _, _, _, _],
-      [_, _, _, _, _, _, _, _, _, _, _, _],
-      [_, Wd, Wd, Wd, Wd, Wd, Wd, Wd, Wd, Wd, Wd, _],
-      [_, Wd, Wl, Wl, Wl, Wl, Wl, Wl, Wl, Wl, Wd, _],
-      [_, Wd, Wl, Wl, Wl, Wl, Wl, Wl, Wl, Wl, Wd, _],
-      [_, Wd, Wl, Wl, Wl, Wl, Wl, Wl, Wl, Wl, Wd, _],
-      [_, Pw, Pl, Pw, Pl, Pw, Pl, Pw, Pl, Pw, Pl, _],
-      [_, Pl, Pw, Pl, Pw, Pl, Pw, Pl, Pw, Pl, Pw, _],
-      [_, Pw, Pl, Pw, Pl, Pw, Pl, Pw, Pl, Pw, Pl, _],
-      [_, Pl, Pw, Pl, Pw, Pl, Pw, Pl, Pw, Pl, Pw, _],
     ]);
 
-    // Stage 3: floor + walls + roof
-    this.tex('house-stage-3', [
-      [_, _, _, _, _, Rf, Rf, _, _, _, _, _],
-      [_, _, _, _, Rf, Rd, Rf, Rf, _, _, _, _],
-      [_, _, _, Rf, Rd, Rf, Rf, Rd, Rf, _, _, _],
-      [_, _, Rf, Rf, Rf, Rd, Rf, Rf, Rf, Rf, _, _],
-      [_, Wd, Wd, Wd, Wd, Wd, Wd, Wd, Wd, Wd, Wd, _],
-      [_, Wd, Wl, Wl, Wl, Wl, Wl, Wl, Wl, Wl, Wd, _],
-      [_, Wd, Wl, Wl, Wl, Wl, Wl, Wl, Wl, Wl, Wd, _],
-      [_, Wd, Wl, Wl, Wl, Wl, Wl, Wl, Wl, Wl, Wd, _],
-      [_, Pw, Pl, Pw, Pl, Pw, Pl, Pw, Pl, Pw, Pl, _],
-      [_, Pl, Pw, Pl, Pw, Pl, Pw, Pl, Pw, Pl, Pw, _],
-      [_, Pw, Pl, Pw, Pl, Pw, Pl, Pw, Pl, Pw, Pl, _],
-      [_, Pl, Pw, Pl, Pw, Pl, Pw, Pl, Pw, Pl, Pw, _],
+    // Stage 3: Active portal — doorway filled with swirling purple/blue/white
+    this.tex('portal-stage-3', [
+      [_, _, _, _, _, Rn, Rn, _, _, _, _, _],
+      [_, _, _, _, Sg, Rb, Rb, Sg, _, _, _, _],
+      [_, _, _, Sg, Rn, Pb, Pb, Rn, Sg, _, _, _],
+      [_, _, _, Rb, Pp, Pg, Pg, Pp, Rb, _, _, _],
+      [_, _, _, Sg, Pl, Pw, Pw, Pl, Sg, _, _, _],
+      [_, _, _, Rn, Pp, Pg, Pg, Pp, Rn, _, _, _],
+      [_, _, _, Sg, Pb, Pl, Pl, Pb, Sg, _, _, _],
+      [_, _, _, Rb, Pp, Pg, Pg, Pp, Rb, _, _, _],
+      [_, _, _, Sg, Pl, Pw, Pw, Pl, Sg, _, _, _],
+      [_, _, Rn, Sg, Sd, Pp, Pp, Sd, Sg, Rn, _, _],
+      [_, _, Sg, Sg, Sg, Dr, Dr, Sg, Sg, Sg, _, _],
+      [_, _, _, _, _, _, _, _, _, _, _, _],
     ]);
 
-    // Stage 4: + door
-    this.tex('house-stage-4', [
-      [_, _, _, _, _, Rf, Rf, _, _, _, _, _],
-      [_, _, _, _, Rf, Rd, Rf, Rf, _, _, _, _],
-      [_, _, _, Rf, Rd, Rf, Rf, Rd, Rf, _, _, _],
-      [_, _, Rf, Rf, Rf, Rd, Rf, Rf, Rf, Rf, _, _],
-      [_, Wd, Wd, Wd, Wd, Wd, Wd, Wd, Wd, Wd, Wd, _],
-      [_, Wd, Wl, Wl, Wl, Wl, Wl, Wl, Wl, Wl, Wd, _],
-      [_, Wd, Wl, Wl, Wl, Do, Do, Wl, Wl, Wl, Wd, _],
-      [_, Wd, Wl, Wl, Wl, Do, Do, Wl, Wl, Wl, Wd, _],
-      [_, Pw, Pl, Pw, Pl, Do, Do, Pw, Pl, Pw, Pl, _],
-      [_, Pl, Pw, Pl, Pw, Pl, Pw, Pl, Pw, Pl, Pw, _],
-      [_, Pw, Pl, Pw, Pl, Pw, Pl, Pw, Pl, Pw, Pl, _],
-      [_, Pl, Pw, Pl, Pw, Pl, Pw, Pl, Pw, Pl, Pw, _],
+    // Shimmer variants for swirl animation on active portal
+    this.tex('portal-active-1', [
+      [_, _, _, _, _, Rn, Rn, _, _, _, _, _],
+      [_, _, _, _, Sg, Rb, Rb, Sg, _, _, _, _],
+      [_, _, _, Sg, Rn, Pg, Pl, Rn, Sg, _, _, _],
+      [_, _, _, Rb, Pl, Pw, Pp, Pg, Rb, _, _, _],
+      [_, _, _, Sg, Pp, Pg, Pw, Pp, Sg, _, _, _],
+      [_, _, _, Rn, Pg, Pw, Pl, Pg, Rn, _, _, _],
+      [_, _, _, Sg, Pl, Pp, Pg, Pb, Sg, _, _, _],
+      [_, _, _, Rb, Pp, Pl, Pw, Pp, Rb, _, _, _],
+      [_, _, _, Sg, Pg, Pw, Pl, Pg, Sg, _, _, _],
+      [_, _, Rn, Sg, Sd, Pp, Pp, Sd, Sg, Rn, _, _],
+      [_, _, Sg, Sg, Sg, Dr, Dr, Sg, Sg, Sg, _, _],
+      [_, _, _, _, _, _, _, _, _, _, _, _],
     ]);
 
-    // Stage 5: + window + flowers (complete!)
-    this.tex('house-stage-5', [
-      [_, _, _, _, _, Rf, Rf, _, _, _, _, _],
-      [_, _, _, _, Rf, Rd, Rf, Rf, _, _, _, _],
-      [_, _, _, Rf, Rd, Rf, Rf, Rd, Rf, _, _, _],
-      [_, _, Rf, Rf, Rf, Rd, Rf, Rf, Rf, Rf, _, _],
-      [_, Wd, Wd, Wd, Wd, Wd, Wd, Wd, Wd, Wd, Wd, _],
-      [_, Wd, Wl, Wb, Wb, Wl, Wl, Wb, Wb, Wl, Wd, _],
-      [_, Wd, Wl, Wb, Wb, Wl, Do, Do, Wl, Wl, Wd, _],
-      [_, Wd, Wl, Fl, Fl, Wl, Do, Do, Wl, Wl, Wd, _],
-      [_, Pw, Pl, Pw, Pl, Pw, Do, Do, Pl, Pw, Pl, _],
-      [_, Pl, Pw, Pl, Pw, Pl, Pw, Pl, Pw, Pl, Pw, _],
-      [_, Pw, Pl, Pw, Pl, Pw, Pl, Pw, Pl, Pw, Pl, _],
-      [_, Pl, Pw, Pl, Pw, Pl, Pw, Pl, Pw, Pl, Pw, _],
+    this.tex('portal-active-2', [
+      [_, _, _, _, _, Rn, Rn, _, _, _, _, _],
+      [_, _, _, _, Sg, Rb, Rb, Sg, _, _, _, _],
+      [_, _, _, Sg, Rn, Pp, Pg, Rn, Sg, _, _, _],
+      [_, _, _, Rb, Pg, Pl, Pw, Pp, Rb, _, _, _],
+      [_, _, _, Sg, Pw, Pp, Pg, Pl, Sg, _, _, _],
+      [_, _, _, Rn, Pl, Pg, Pw, Pp, Rn, _, _, _],
+      [_, _, _, Sg, Pp, Pw, Pl, Pg, Sg, _, _, _],
+      [_, _, _, Rb, Pg, Pp, Pw, Pl, Rb, _, _, _],
+      [_, _, _, Sg, Pw, Pg, Pp, Pw, Sg, _, _, _],
+      [_, _, Rn, Sg, Sd, Pp, Pp, Sd, Sg, Rn, _, _],
+      [_, _, Sg, Sg, Sg, Dr, Dr, Sg, Sg, Sg, _, _],
+      [_, _, _, _, _, _, _, _, _, _, _, _],
     ]);
   }
 

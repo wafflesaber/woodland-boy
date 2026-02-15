@@ -1,20 +1,15 @@
-import { BUILDING_STAGES } from '../config.js';
+import { PORTAL_STAGES } from '../config.js';
 import EventBus from '../utils/EventBus.js';
 
 export default class BuildingManager {
-  constructor(scene, housePlotX, housePlotY) {
+  constructor(scene, plotX, plotY) {
     this.scene = scene;
-    this.stage = 0; // 0=empty, 1=floor, 2=walls, 3=roof, 4=door, 5=window/complete
-    this.x = housePlotX;
-    this.y = housePlotY;
-    this.houseSprite = null;
+    this.stage = 0; // 0=empty, 1=magic circle, 2=base+arch, 3=runes+active (complete)
+    this.x = plotX;
+    this.y = plotY;
+    this.portalSprite = null;
   }
 
-  /**
-   * Check whether the inventory has enough materials for the next stage.
-   * @param {InventoryManager} inventory
-   * @returns {boolean}
-   */
   canBuild(inventory) {
     const next = this.getNextStageCost();
     if (!next) return false;
@@ -25,37 +20,27 @@ export default class BuildingManager {
     return true;
   }
 
-  /**
-   * Return the name + cost of the next stage, or null if house is complete.
-   */
   getNextStageCost() {
-    if (this.stage >= BUILDING_STAGES.length) return null;
-    return BUILDING_STAGES[this.stage];
+    if (this.stage >= PORTAL_STAGES.length) return null;
+    return PORTAL_STAGES[this.stage];
   }
 
-  /**
-   * Consume materials from inventory, advance stage, update sprite.
-   * @param {InventoryManager} inventory
-   * @returns {number} the new stage number, or -1 if build failed
-   */
   build(inventory) {
     const next = this.getNextStageCost();
     if (!next) return -1;
 
-    // Consume materials
     for (const [itemType, count] of Object.entries(next.cost)) {
       const removed = inventory.removeByType(itemType, count);
-      if (!removed) return -1; // shouldn't happen if canBuild was checked
+      if (!removed) return -1;
     }
 
     this.stage++;
 
-    // Update house sprite texture
-    if (this.houseSprite) {
-      this.houseSprite.setTexture(`house-stage-${this.stage}`);
+    if (this.portalSprite) {
+      this.portalSprite.setTexture(`portal-stage-${this.stage}`);
     }
 
-    EventBus.emit('building-stage-changed', {
+    EventBus.emit('portal-stage-changed', {
       stage: this.stage,
       complete: this.isComplete(),
     });
@@ -63,10 +48,7 @@ export default class BuildingManager {
     return this.stage;
   }
 
-  /**
-   * Is the house fully built?
-   */
   isComplete() {
-    return this.stage >= BUILDING_STAGES.length;
+    return this.stage >= PORTAL_STAGES.length;
   }
 }

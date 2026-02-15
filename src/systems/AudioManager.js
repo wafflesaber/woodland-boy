@@ -152,6 +152,36 @@ export default class AudioManager {
     this._tone(800, 0.04, 'square', 0.1);
   }
 
+  // Mystical ascending tones for portal activation
+  playPortalActivate() {
+    if (!this.unlocked) return;
+    const notes = [523, 659, 784, 988, 1047]; // C5 E5 G5 B5 C6
+    for (let i = 0; i < notes.length; i++) {
+      this._toneAt(notes[i], 0.3, 'sine', 0.2, i * 0.12);
+    }
+  }
+
+  // Whooshing sweep for entering the portal
+  playPortalEnter() {
+    if (!this.unlocked) return;
+    const t = this.context.currentTime;
+    const osc = this.context.createOscillator();
+    const gain = this.context.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(800, t);
+    osc.frequency.exponentialRampToValueAtTime(100, t + 0.6);
+    osc.connect(gain);
+    gain.connect(this.sfxGain);
+    gain.gain.setValueAtTime(0.25, t);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.7);
+    osc.start(t);
+    osc.stop(t + 0.7);
+
+    // Shimmer overlay
+    this._toneAt(1200, 0.5, 'sine', 0.1, 0.1);
+    this._toneAt(600, 0.4, 'triangle', 0.08, 0.3);
+  }
+
   // Gentle low "nope" for wrong item / can't do that
   playError() {
     if (!this.unlocked) return;

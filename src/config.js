@@ -15,13 +15,13 @@ export const ANIMALS = {
   bird:     { type: 'bird',     texture: 'animal-bird',     favoriteFood: 'acorns',    tameable: true,  shy: true,  speed: 50,  fleeSpeed: 80,  requiredFeedings: 2, count: 5 },
 };
 
-export const BUILDING_STAGES = [
-  { name: 'Floor',  cost: { planks: 3 } },
-  { name: 'Walls',  cost: { planks: 3, stones: 3 } },
-  { name: 'Roof',   cost: { straw: 3 } },
-  { name: 'Door',   cost: { planks: 2 } },
-  { name: 'Window', cost: { stones: 2 } },
+export const PORTAL_STAGES = [
+  { name: 'Magic Circle',     cost: { planks: 3 } },
+  { name: 'Base & Arch',      cost: { planks: 3, stones: 3 } },
+  { name: 'Runes & Activate', cost: { straw: 3 } },
 ];
+
+export const PORTAL_ACTIVATION_RANGE = 80;
 
 export const ITEM_SPAWN_COUNTS = {
   berries: 10,
