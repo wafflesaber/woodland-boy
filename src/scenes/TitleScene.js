@@ -61,9 +61,18 @@ export default class TitleScene extends Phaser.Scene {
 
     // Handle first tap — unlock audio + start game
     this.input.once('pointerdown', () => {
-      // Unlock audio for iOS Safari
+      // Unlock audio for iOS Safari, then start music
       if (this.game.audioManager) {
         this.game.audioManager.unlock();
+        // Retry startMusic until unlocked (handles slow iOS resume)
+        const tryStartMusic = () => {
+          if (this.game.audioManager.unlocked) {
+            this.game.audioManager.startMusic();
+          } else {
+            setTimeout(tryStartMusic, 100);
+          }
+        };
+        setTimeout(tryStartMusic, 150);
       }
 
       // Fade out and start game

@@ -76,6 +76,17 @@ export default class GameScene extends Phaser.Scene {
 
     this.physics.add.collider(this.animalsGroup, this.mapData.obstacles);
 
+    // ─── Water shimmer ───
+    this.waterTiles = this.mapData.waterTiles || [];
+    this.waterShimmerTimer = 0;
+
+    // ─── Ambient particles ───
+    this.ambientTimer = 0;
+    this.ambientParticles = [];
+
+    // ─── Tamed sparkle timer ───
+    this.tamedSparkleTimer = 0;
+
     // ─── Touch input ───
     this.input.on('pointerdown', (pointer) => {
       const worldX = pointer.worldX;
@@ -171,6 +182,12 @@ export default class GameScene extends Phaser.Scene {
       for (const timer of this.respawnTimers) {
         timer.remove(false);
       }
+      // Clean up ambient particles
+      for (const p of this.ambientParticles) {
+        if (p && p.active) p.destroy();
+      }
+      this.ambientParticles = [];
+      this.waterTiles = [];
     });
   }
 
@@ -183,6 +200,36 @@ export default class GameScene extends Phaser.Scene {
       if (animal.active) {
         animal.update(time, delta);
       }
+    }
+
+    // ─── Water shimmer: staggered texture cycling ───
+    // Update ~20 tiles per frame spread over time instead of all 100+ at once
+    this.waterShimmerTimer += delta;
+    if (this.waterShimmerTimer > 50 && this.waterTiles.length > 0) {
+      this.waterShimmerTimer = 0;
+      // Each frame, randomly retexture a few water tiles
+      const count = Math.min(5, this.waterTiles.length);
+      for (let i = 0; i < count; i++) {
+        const idx = Math.floor(Math.random() * this.waterTiles.length);
+        const tile = this.waterTiles[idx];
+        if (tile && tile.active) {
+          tile.setTexture(`terrain-water-${Math.floor(Math.random() * 3)}`);
+        }
+      }
+    }
+
+    // ─── Ambient particles (butterfly/leaf drift) ───
+    this.ambientTimer += delta;
+    if (this.ambientTimer > 3000 + Math.random() * 2000) {
+      this.ambientTimer = 0;
+      this.spawnAmbientParticle();
+    }
+
+    // ─── Tamed animal sparkle ───
+    this.tamedSparkleTimer += delta;
+    if (this.tamedSparkleTimer > 3000 + Math.random() * 2000) {
+      this.tamedSparkleTimer = 0;
+      this.spawnTamedSparkle();
     }
 
     // Check pending collect target
@@ -609,6 +656,87 @@ export default class GameScene extends Phaser.Scene {
         onComplete: () => star.destroy(),
       });
     }
+  }
+
+  // ─── Ambient particles ───
+
+  spawnAmbientParticle() {
+    // Cap active ambient particles to prevent unbounded growth
+    this.ambientParticles = this.ambientParticles.filter(p => p && p.active);
+    if (this.ambientParticles.length >= 4) return;
+
+    const cam = this.cameras.main;
+    // Spawn just off the right side of the viewport
+    const startX = cam.scrollX + 1024 + 20;
+    const startY = cam.scrollY + 100 + Math.random() * 500;
+    const endX = cam.scrollX - 40;
+    const endY = startY + (Math.random() - 0.3) * 200;
+
+    // Alternate between leaf and butterfly visuals
+    const tex = Math.random() > 0.5 ? 'particle-sparkle' : 'particle-star';
+    const particle = this.add.image(startX, startY, tex);
+    particle.setDepth(9000);
+    particle.setAlpha(0.6);
+    particle.setScale(0.5 + Math.random() * 0.4);
+    // Tint green for leaf, or pink/yellow for butterfly
+    if (Math.random() > 0.5) {
+      particle.setTint(0x88CC44); // leaf green
+    } else {
+      particle.setTint(Phaser.Display.Color.GetColor(
+        200 + Math.floor(Math.random() * 55),
+        100 + Math.floor(Math.random() * 100),
+        180 + Math.floor(Math.random() * 75)
+      ));
+    }
+
+    // Track for cleanup
+    this.ambientParticles.push(particle);
+
+    // Use a random phase offset so oscillation isn't tied to wall-clock time
+    const phaseOffset = Math.random() * Math.PI * 2;
+
+    this.tweens.add({
+      targets: particle,
+      x: endX,
+      y: endY,
+      alpha: 0,
+      duration: 6000 + Math.random() * 3000,
+      ease: 'Sine.easeInOut',
+      onUpdate: (tween) => {
+        // Gentle vertical oscillation for drifting feel
+        particle.y += Math.sin(tween.elapsed * 0.003 + phaseOffset) * 0.3;
+      },
+      onComplete: () => {
+        particle.destroy();
+      },
+    });
+  }
+
+  // ─── Tamed animal sparkle ───
+
+  spawnTamedSparkle() {
+    const tamed = this.animals.filter(a => a.active && a.tamed);
+    if (tamed.length === 0) return;
+
+    const animal = tamed[Math.floor(Math.random() * tamed.length)];
+    const offsetX = (Math.random() - 0.5) * 20;
+    const offsetY = -10 + (Math.random() - 0.5) * 15;
+
+    const sparkle = this.add.image(animal.x + offsetX, animal.y + offsetY, 'particle-sparkle');
+    sparkle.setDepth(10000);
+    sparkle.setScale(0.5);
+    sparkle.setAlpha(0.8);
+
+    this.tweens.add({
+      targets: sparkle,
+      y: sparkle.y - 20,
+      alpha: 0,
+      scaleX: 0.1,
+      scaleY: 0.1,
+      duration: 600 + Math.random() * 300,
+      ease: 'Power2',
+      onComplete: () => sparkle.destroy(),
+    });
   }
 
   getTappedCollectible(worldX, worldY) {

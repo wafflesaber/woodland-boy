@@ -11,6 +11,9 @@ export default class MapGenerator {
     // Static physics group for trees, rocks, and river barriers
     this.obstacles = this.scene.physics.add.staticGroup();
 
+    // Track water tile sprites for shimmer animation
+    this.waterTiles = [];
+
     // Track occupied cells to prevent overlap: grid[row][col] = true if blocked
     this.occupied = Array.from({ length: this.rows }, () => Array(this.cols).fill(false));
 
@@ -62,6 +65,7 @@ export default class MapGenerator {
       animalSpawnZones,
       obstacles: this.obstacles,
       clearings,
+      waterTiles: this.waterTiles,
     };
   }
 
@@ -227,7 +231,12 @@ export default class MapGenerator {
           texKey = `terrain-grass-${Math.floor(Math.random() * 3)}`;
         }
 
-        this.scene.add.image(wx, wy, texKey).setDepth(-1);
+        const tile = this.scene.add.image(wx, wy, texKey).setDepth(-1);
+
+        // Track water tiles for shimmer animation
+        if (riverCells.has(key) && !bridgeCells.has(key)) {
+          this.waterTiles.push(tile);
+        }
       }
     }
 

@@ -85,6 +85,11 @@ export default class UIScene extends Phaser.Scene {
       // Single tap: select slot
       this.lastSlotTap = { index, time: now };
       EventBus.emit('select-slot', index);
+
+      // Play select sound
+      if (this.game.audioManager) {
+        this.game.audioManager.playSelect();
+      }
     });
 
     EventBus.on('taming-progress', this.onTamingProgress, this);
