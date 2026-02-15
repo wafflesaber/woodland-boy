@@ -13,8 +13,9 @@ const config = {
   backgroundColor: '#87CEEB',
 
   scale: {
-    mode: Phaser.Scale.ENVELOP,
+    mode: Phaser.Scale.FIT,
     autoCenter: Phaser.Scale.CENTER_BOTH,
+    expandParent: true,
   },
 
   render: {
