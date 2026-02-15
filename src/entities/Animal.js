@@ -39,8 +39,9 @@ export default class Animal extends Phaser.Physics.Arcade.Sprite {
     this.shadow.setAlpha(0.35);
     this.shadow.setDepth(0);
 
-    // Smaller body for birds
-    if (config.type === 'bird') {
+    // Smaller body for small animals (6x6 sprite grid)
+    const smallTypes = ['bird', 'snake', 'scorpion', 'lizard', 'vulture', 'roadrunner'];
+    if (smallTypes.includes(config.type)) {
       this.body.setSize(16, 16);
       this.body.setOffset(4, 6);
       this.shadow.setScale(0.7);

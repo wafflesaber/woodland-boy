@@ -1,13 +1,19 @@
-import { PORTAL_STAGES } from '../config.js';
 import EventBus from '../utils/EventBus.js';
 
 export default class BuildingManager {
-  constructor(scene, plotX, plotY) {
+  /**
+   * @param {Phaser.Scene} scene
+   * @param {number} plotX
+   * @param {number} plotY
+   * @param {Array} portalStages — array of { name, cost } from the biome config
+   */
+  constructor(scene, plotX, plotY, portalStages) {
     this.scene = scene;
-    this.stage = 0; // 0=empty, 1=magic circle, 2=base+arch, 3=runes+active (complete)
+    this.stage = 0;
     this.x = plotX;
     this.y = plotY;
     this.portalSprite = null;
+    this.portalStages = portalStages;
   }
 
   canBuild(inventory) {
@@ -21,8 +27,8 @@ export default class BuildingManager {
   }
 
   getNextStageCost() {
-    if (this.stage >= PORTAL_STAGES.length) return null;
-    return PORTAL_STAGES[this.stage];
+    if (this.stage >= this.portalStages.length) return null;
+    return this.portalStages[this.stage];
   }
 
   build(inventory) {
@@ -49,6 +55,6 @@ export default class BuildingManager {
   }
 
   isComplete() {
-    return this.stage >= PORTAL_STAGES.length;
+    return this.stage >= this.portalStages.length;
   }
 }

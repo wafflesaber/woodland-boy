@@ -39,7 +39,7 @@ export default class UIScene extends Phaser.Scene {
         new Phaser.Geom.Rectangle(0, 0, SLOT_SIZE, SLOT_SIZE),
         Phaser.Geom.Rectangle.Contains
       );
-      slot.on('pointerdown', () => {
+      slot.on('pointerup', () => {
         EventBus.emit('ui-slot-tap', i);
       });
       this.slotSprites.push(slot);
@@ -73,9 +73,11 @@ export default class UIScene extends Phaser.Scene {
 
     EventBus.on('ui-slot-tap', (index) => {
       const now = Date.now();
-      const DOUBLE_TAP_MS = 400;
+      const DOUBLE_TAP_MAX = 400; // max gap between taps
+      const DOUBLE_TAP_MIN = 80;  // min gap — filters out touch-bounce duplicates
 
-      if (this.lastSlotTap.index === index && now - this.lastSlotTap.time < DOUBLE_TAP_MS) {
+      const elapsed = now - this.lastSlotTap.time;
+      if (this.lastSlotTap.index === index && elapsed >= DOUBLE_TAP_MIN && elapsed < DOUBLE_TAP_MAX) {
         // Double-tap: drop the item
         EventBus.emit('drop-item', index);
         this.lastSlotTap = { index: -1, time: 0 };

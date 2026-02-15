@@ -1,66 +1,57 @@
 import { WORLD_WIDTH, WORLD_HEIGHT, TILE_SIZE } from '../config.js';
 
 export default class MapGenerator {
-  constructor(scene) {
+  /**
+   * @param {Phaser.Scene} scene
+   * @param {object} biome — biome config object from biomes/*.js
+   */
+  constructor(scene, biome) {
     this.scene = scene;
+    this.biome = biome;
     this.cols = Math.floor(WORLD_WIDTH / TILE_SIZE);   // 50
-    this.rows = Math.floor(WORLD_HEIGHT / TILE_SIZE);   // 37 (rounded down from 37.5)
+    this.rows = Math.floor(WORLD_HEIGHT / TILE_SIZE);   // 37
   }
 
   generate() {
-    // Static physics group for trees, rocks, and river barriers
     this.obstacles = this.scene.physics.add.staticGroup();
-
-    // Track water tile sprites for shimmer animation
     this.waterTiles = [];
-
-    // Track occupied cells to prevent overlap: grid[row][col] = true if blocked
     this.occupied = Array.from({ length: this.rows }, () => Array(this.cols).fill(false));
 
-    // 1. River path (compute first so we can place the bridge)
-    const riverCells = this.generateRiverPath();
+    // 1. Water (river or oasis)
+    let waterCells;
+    let bridgeCells = new Set();
+    if (this.biome.terrain.waterType === 'oasis') {
+      waterCells = this.generateOases();
+    } else {
+      waterCells = this.generateRiverPath();
+      bridgeCells = this.placeBridge(waterCells);
+    }
 
     // 2. Clearings
     const clearings = this.generateClearings();
 
-    // 3. Bridge across the river
-    const bridgeCells = this.placeBridge(riverCells);
-
-    // 4. Grass base + river + sand banks + bridge
-    this.layTerrain(riverCells, clearings, bridgeCells);
-
-    // 5. Dirt in clearings
+    // 3. Terrain tiles
+    this.layTerrain(waterCells, clearings, bridgeCells);
     this.layClearing(clearings);
 
-    // 6. Trees
-    const trees = this.placeTrees(clearings, riverCells);
+    // 4. Decorations
+    const trees = this.placeTrees(clearings, waterCells);
+    const { berryPositions } = this.placeBushes(clearings, waterCells, trees);
+    const rockPositions = this.placeRocks(clearings, waterCells, trees);
+    this.placeFlowers(clearings, waterCells, trees);
 
-    // 6. Bushes (some are berry bushes)
-    const { berryPositions } = this.placeBushes(clearings, riverCells, trees);
-
-    // 7. Rocks
-    const rockPositions = this.placeRocks(clearings, riverCells, trees);
-
-    // 8. Flowers (decorative only)
-    this.placeFlowers(clearings, riverCells, trees);
-
-    // 9. Compute spawn points for collectible items
+    // 5. Item spawn points
     const itemSpawnPoints = this.computeItemSpawnPoints(
-      berryPositions, trees, riverCells, clearings, rockPositions
+      berryPositions, trees, waterCells, clearings, rockPositions
     );
 
-    // 10. Compute animal spawn zones
-    const animalSpawnZones = this.computeAnimalSpawnZones(clearings, riverCells, trees);
+    // 6. Animal spawn zones
+    const animalSpawnZones = this.computeAnimalSpawnZones(clearings, waterCells, trees);
 
-    // House plot = first clearing
     const housePlot = clearings[0];
-    const housePlotPosition = {
-      x: housePlot.cx,
-      y: housePlot.cy,
-    };
 
     return {
-      housePlotPosition,
+      housePlotPosition: { x: housePlot.cx, y: housePlot.cy },
       itemSpawnPoints,
       animalSpawnZones,
       obstacles: this.obstacles,
@@ -82,30 +73,27 @@ export default class MapGenerator {
     return false;
   }
 
-  isInRiver(col, row, riverCells) {
-    return riverCells.has(`${col},${row}`);
+  isInWater(col, row, waterCells) {
+    return waterCells.has(`${col},${row}`);
   }
 
   dist(x1, y1, x2, y2) {
     return Math.sqrt((x1 - x2) ** 2 + (y1 - y2) ** 2);
   }
 
-  // ─── 1. Clearings ───
+  // ─── Clearings ───
 
   generateClearings() {
     const clearings = [];
     const placements = [
-      // House plot — center-ish area
       { preferCol: Math.floor(this.cols * 0.3), preferRow: Math.floor(this.rows * 0.5) },
-      // Second clearing — upper right
       { preferCol: Math.floor(this.cols * 0.7), preferRow: Math.floor(this.rows * 0.25) },
-      // Third clearing — lower area
       { preferCol: Math.floor(this.cols * 0.5), preferRow: Math.floor(this.rows * 0.8) },
     ];
 
     for (const { preferCol, preferRow } of placements) {
-      const w = 5 + Math.floor(Math.random() * 2); // 5-6 tiles wide
-      const h = 5 + Math.floor(Math.random() * 2); // 5-6 tiles tall
+      const w = 5 + Math.floor(Math.random() * 2);
+      const h = 5 + Math.floor(Math.random() * 2);
       const left = Math.max(1, Math.min(preferCol - Math.floor(w / 2), this.cols - w - 1));
       const top = Math.max(1, Math.min(preferRow - Math.floor(h / 2), this.rows - h - 1));
       const right = left + w - 1;
@@ -115,7 +103,6 @@ export default class MapGenerator {
 
       clearings.push({ left, top, right, bottom, cx, cy, w, h });
 
-      // Mark cells as occupied
       for (let r = top; r <= bottom; r++) {
         for (let c = left; c <= right; c++) {
           if (r >= 0 && r < this.rows && c >= 0 && c < this.cols) {
@@ -128,20 +115,18 @@ export default class MapGenerator {
     return clearings;
   }
 
-  // ─── 2. River ───
+  // ─── River (woodland water) ───
 
   generateRiverPath() {
     const riverCells = new Set();
-    const riverWidth = 3; // tiles wide
+    const riverWidth = 3;
 
-    // Start somewhere in the middle third
     let rx = this.cols * 0.4 + Math.random() * this.cols * 0.2;
     const amplitude = 4 + Math.random() * 3;
     const frequency = 0.06 + Math.random() * 0.03;
     const phase = Math.random() * Math.PI * 2;
 
     for (let row = 0; row < this.rows; row++) {
-      // Gentle sinusoidal wander
       rx += Math.sin(row * frequency + phase) * 0.6;
       rx = Math.max(3, Math.min(rx, this.cols - 4));
 
@@ -160,16 +145,59 @@ export default class MapGenerator {
     return riverCells;
   }
 
-  // ─── 3. Bridge ───
+  // ─── Oases (desert water) ───
+
+  generateOases() {
+    const waterCells = new Set();
+    const pondCount = 2 + Math.floor(Math.random() * 2); // 2-3 ponds
+
+    // Pick spread-out positions
+    const pondCenters = [];
+    for (let attempt = 0; attempt < pondCount * 30; attempt++) {
+      if (pondCenters.length >= pondCount) break;
+
+      const col = 5 + Math.floor(Math.random() * (this.cols - 10));
+      const row = 5 + Math.floor(Math.random() * (this.rows - 10));
+
+      let tooClose = false;
+      for (const p of pondCenters) {
+        if (this.dist(col, row, p.col, p.row) < 12) { tooClose = true; break; }
+      }
+      if (tooClose) continue;
+
+      pondCenters.push({ col, row });
+    }
+
+    // Create oval ponds
+    for (const { col: cx, row: cy } of pondCenters) {
+      const rx = 2 + Math.floor(Math.random() * 2); // radius 2-3
+      const ry = 2 + Math.floor(Math.random() * 2);
+
+      for (let r = cy - ry; r <= cy + ry; r++) {
+        for (let c = cx - rx; c <= cx + rx; c++) {
+          if (r < 0 || r >= this.rows || c < 0 || c >= this.cols) continue;
+          // Ellipse check
+          const dx = (c - cx) / rx;
+          const dy = (r - cy) / ry;
+          if (dx * dx + dy * dy <= 1.0) {
+            waterCells.add(`${c},${r}`);
+            this.occupied[r][c] = true;
+          }
+        }
+      }
+    }
+
+    return waterCells;
+  }
+
+  // ─── Bridge ───
 
   placeBridge(riverCells) {
     const bridgeCells = new Set();
 
-    // Pick a row in the middle third of the map
     const minRow = Math.floor(this.rows * 0.3);
     const maxRow = Math.floor(this.rows * 0.7);
 
-    // Find a row that has river cells (try center first, then scan outward)
     let bestRow = Math.floor((minRow + maxRow) / 2);
     for (let offset = 0; offset < maxRow - minRow; offset++) {
       const tryRow = bestRow + (offset % 2 === 0 ? offset / 2 : -Math.ceil(offset / 2));
@@ -182,7 +210,6 @@ export default class MapGenerator {
       if (hasRiver) { bestRow = tryRow; break; }
     }
 
-    // Collect all river cells at bestRow and one row above/below for a 3-tile-wide bridge
     for (let dr = -1; dr <= 1; dr++) {
       const row = bestRow + dr;
       if (row < 0 || row >= this.rows) continue;
@@ -196,18 +223,20 @@ export default class MapGenerator {
     return bridgeCells;
   }
 
-  // ─── 4. Lay terrain tiles ───
+  // ─── Lay terrain tiles ───
 
-  layTerrain(riverCells, clearings, bridgeCells) {
-    // Build a set of sand bank cells (adjacent to river but not in river)
-    const sandCells = new Set();
-    for (const key of riverCells) {
+  layTerrain(waterCells, clearings, bridgeCells) {
+    const t = this.biome.terrain;
+
+    // Sand bank cells (adjacent to water but not in water)
+    const bankCells = new Set();
+    for (const key of waterCells) {
       const [col, row] = key.split(',').map(Number);
       for (let dr = -1; dr <= 1; dr++) {
         for (let dc = -1; dc <= 1; dc++) {
           const nk = `${col + dc},${row + dr}`;
-          if (!riverCells.has(nk)) {
-            sandCells.add(nk);
+          if (!waterCells.has(nk)) {
+            bankCells.add(nk);
           }
         }
       }
@@ -221,27 +250,27 @@ export default class MapGenerator {
 
         let texKey;
         if (bridgeCells.has(key)) {
-          // Bridge tile — walkable plank over water
           texKey = 'terrain-bridge';
-        } else if (riverCells.has(key)) {
-          texKey = `terrain-water-${Math.floor(Math.random() * 3)}`;
-        } else if (sandCells.has(key)) {
-          texKey = 'terrain-sand';
+        } else if (waterCells.has(key)) {
+          texKey = `terrain-${t.water}-${Math.floor(Math.random() * t.waterVariants)}`;
+        } else if (bankCells.has(key)) {
+          texKey = t.bankTile;
         } else {
-          texKey = `terrain-grass-${Math.floor(Math.random() * 3)}`;
+          texKey = `${t.base}-${Math.floor(Math.random() * t.baseVariants)}`;
         }
 
+        // For terrain tiles that are just a direct key (no variant suffix), use as-is
+        // For grass/sand patterns like 'desert-sand-0', they already include the variant
         const tile = this.scene.add.image(wx, wy, texKey).setDepth(-1);
 
-        // Track water tiles for shimmer animation
-        if (riverCells.has(key) && !bridgeCells.has(key)) {
+        if (waterCells.has(key) && !bridgeCells.has(key)) {
           this.waterTiles.push(tile);
         }
       }
     }
 
-    // River collision: block water tiles, but NOT bridge cells
-    for (const key of riverCells) {
+    // Water collision
+    for (const key of waterCells) {
       if (bridgeCells.has(key)) continue;
       const [col, row] = key.split(',').map(Number);
       const wx = col * TILE_SIZE + TILE_SIZE / 2;
@@ -251,26 +280,26 @@ export default class MapGenerator {
     }
   }
 
-  // ─── 4. Clearing dirt ───
-
   layClearing(clearings) {
+    const clearingTile = this.biome.terrain.clearingTile;
     for (const c of clearings) {
       for (let row = c.top; row <= c.bottom; row++) {
         for (let col = c.left; col <= c.right; col++) {
           const wx = col * TILE_SIZE + TILE_SIZE / 2;
           const wy = row * TILE_SIZE + TILE_SIZE / 2;
-          this.scene.add.image(wx, wy, 'terrain-dirt').setDepth(-0.5);
+          this.scene.add.image(wx, wy, clearingTile).setDepth(-0.5);
         }
       }
     }
   }
 
-  // ─── 5. Trees ───
+  // ─── Trees ───
 
-  placeTrees(clearings, riverCells) {
-    const trees = []; // { x, y } world positions
-    const targetCount = 80;
-    const minDist = 80; // min distance between trees
+  placeTrees(clearings, waterCells) {
+    const trees = [];
+    const cfg = this.biome.decorations.trees;
+    const targetCount = cfg.count;
+    const minDist = cfg.minDist;
 
     for (let attempt = 0; attempt < targetCount * 5; attempt++) {
       if (trees.length >= targetCount) break;
@@ -278,14 +307,12 @@ export default class MapGenerator {
       const col = 1 + Math.floor(Math.random() * (this.cols - 2));
       const row = 1 + Math.floor(Math.random() * (this.rows - 2));
 
-      // Skip clearings and river
       if (this.isInClearing(col, row, clearings)) continue;
-      if (this.isInRiver(col, row, riverCells)) continue;
+      if (this.isInWater(col, row, waterCells)) continue;
 
       const wx = col * TILE_SIZE + TILE_SIZE / 2;
       const wy = row * TILE_SIZE + TILE_SIZE / 2;
 
-      // Min distance check against existing trees
       let tooClose = false;
       for (const t of trees) {
         if (this.dist(wx, wy, t.x, t.y) < minDist) {
@@ -295,18 +322,14 @@ export default class MapGenerator {
       }
       if (tooClose) continue;
 
-      // Place tree: trunk + canopy
-      const canopyVariant = Math.random() < 0.5 ? 'tree-canopy-1' : 'tree-canopy-2';
+      const canopyVariant = cfg.canopies[Math.floor(Math.random() * cfg.canopies.length)];
 
-      // Trunk — lower part of the tree, gets a physics body
-      const trunk = this.scene.add.image(wx, wy + 8, 'tree-trunk');
-      trunk.setDepth(wy + 8); // Y-sort: base of trunk
+      const trunk = this.scene.add.image(wx, wy + 8, cfg.trunk);
+      trunk.setDepth(wy + 8);
 
-      // Canopy — higher depth so player walks "behind" trees
       const canopy = this.scene.add.image(wx, wy - 16, canopyVariant);
-      canopy.setDepth(wy - 16 + 10000); // Canopy layer: always above ground entities
+      canopy.setDepth(wy - 16 + 10000);
 
-      // Physics body on trunk area
       const body = this.scene.add.zone(wx, wy + 12, 16, 16);
       this.obstacles.add(body);
 
@@ -316,11 +339,12 @@ export default class MapGenerator {
     return trees;
   }
 
-  // ─── 6. Bushes ───
+  // ─── Bushes ───
 
-  placeBushes(clearings, riverCells, trees) {
+  placeBushes(clearings, waterCells, trees) {
     const berryPositions = [];
-    const targetCount = 40;
+    const cfg = this.biome.decorations.bushes;
+    const targetCount = cfg.count;
     const placed = [];
 
     for (let attempt = 0; attempt < targetCount * 4; attempt++) {
@@ -330,12 +354,11 @@ export default class MapGenerator {
       const row = 1 + Math.floor(Math.random() * (this.rows - 2));
 
       if (this.isInClearing(col, row, clearings)) continue;
-      if (this.isInRiver(col, row, riverCells)) continue;
+      if (this.isInWater(col, row, waterCells)) continue;
 
       const wx = col * TILE_SIZE + TILE_SIZE / 2;
       const wy = row * TILE_SIZE + TILE_SIZE / 2;
 
-      // Don't overlap trees
       let nearTree = false;
       for (const t of trees) {
         if (this.dist(wx, wy, t.x, t.y) < 50) {
@@ -343,10 +366,7 @@ export default class MapGenerator {
           break;
         }
       }
-      // Bushes prefer being near trees but not on top of them
-      // Skip if ON a tree, but allow if within moderate distance
 
-      // Don't overlap other bushes
       let tooClose = false;
       for (const b of placed) {
         if (this.dist(wx, wy, b.x, b.y) < 40) {
@@ -356,27 +376,27 @@ export default class MapGenerator {
       }
       if (tooClose || nearTree) continue;
 
-      // ~30% chance of being a berry bush
-      const isBerry = Math.random() < 0.3;
-      const tex = isBerry ? 'bush-berry' : 'bush';
+      const isBerry = Math.random() < cfg.berryChance;
+      const tex = isBerry ? cfg.berry : cfg.plain;
       const bush = this.scene.add.image(wx, wy, tex);
       bush.setDepth(wy);
 
       placed.push({ x: wx, y: wy });
 
       if (isBerry) {
-        berryPositions.push({ x: wx, y: wy - 10 }); // spawn berries slightly above bush
+        berryPositions.push({ x: wx, y: wy - 10 });
       }
     }
 
     return { berryPositions };
   }
 
-  // ─── 7. Rocks ───
+  // ─── Rocks ───
 
-  placeRocks(clearings, riverCells, trees) {
+  placeRocks(clearings, waterCells, trees) {
     const positions = [];
-    const targetCount = 20;
+    const cfg = this.biome.decorations.rocks;
+    const targetCount = cfg.count;
 
     for (let attempt = 0; attempt < targetCount * 4; attempt++) {
       if (positions.length >= targetCount) break;
@@ -385,12 +405,11 @@ export default class MapGenerator {
       const row = 1 + Math.floor(Math.random() * (this.rows - 2));
 
       if (this.isInClearing(col, row, clearings)) continue;
-      if (this.isInRiver(col, row, riverCells)) continue;
+      if (this.isInWater(col, row, waterCells)) continue;
 
       const wx = col * TILE_SIZE + TILE_SIZE / 2;
       const wy = row * TILE_SIZE + TILE_SIZE / 2;
 
-      // Don't overlap trees
       let tooClose = false;
       for (const t of trees) {
         if (this.dist(wx, wy, t.x, t.y) < 50) { tooClose = true; break; }
@@ -400,10 +419,9 @@ export default class MapGenerator {
       }
       if (tooClose) continue;
 
-      const rock = this.scene.add.image(wx, wy, 'rock');
+      const rock = this.scene.add.image(wx, wy, cfg.texture);
       rock.setDepth(wy);
 
-      // Small collision body
       const body = this.scene.add.zone(wx, wy, 20, 16);
       this.obstacles.add(body);
 
@@ -413,144 +431,240 @@ export default class MapGenerator {
     return positions;
   }
 
-  // ─── 8. Flowers ───
+  // ─── Flowers ───
 
-  placeFlowers(clearings, riverCells, trees) {
-    const variants = ['flower-red', 'flower-yellow', 'flower-purple'];
-    const count = 50;
+  placeFlowers(clearings, waterCells, trees) {
+    const cfg = this.biome.decorations.flowers;
+    const count = cfg.count;
 
     for (let i = 0; i < count; i++) {
-      // Random position with some pixel-level offset within tiles
       const wx = 40 + Math.random() * (WORLD_WIDTH - 80);
       const wy = 40 + Math.random() * (WORLD_HEIGHT - 80);
       const col = Math.floor(wx / TILE_SIZE);
       const row = Math.floor(wy / TILE_SIZE);
 
       if (this.isInClearing(col, row, clearings)) continue;
-      if (this.isInRiver(col, row, riverCells)) continue;
+      if (this.isInWater(col, row, waterCells)) continue;
 
-      const tex = variants[Math.floor(Math.random() * variants.length)];
+      const tex = cfg.variants[Math.floor(Math.random() * cfg.variants.length)];
       const flower = this.scene.add.image(wx, wy, tex);
-      flower.setDepth(0); // flat on ground
+      flower.setDepth(0);
     }
   }
 
-  // ─── 9. Item spawn points ───
+  // ─── Item spawn points ───
 
-  computeItemSpawnPoints(berryPositions, trees, riverCells, clearings, rockPositions) {
-    const points = {
-      berries: [...berryPositions],
-      mushrooms: [],
-      acorns: [],
-      fish: [],
-      planks: [],
-      stones: [],
-      straw: [],
-    };
+  computeItemSpawnPoints(berryPositions, trees, waterCells, clearings, rockPositions) {
+    const biomeItems = this.biome.itemSpawnCounts;
+    const points = {};
 
-    // Mushrooms: at base of some trees
+    // Initialize all item types with empty arrays
+    for (const itemType of Object.keys(biomeItems)) {
+      points[itemType] = [];
+    }
+
+    // Food items that spawn at berry bushes (fruit-bearing bushes/cacti)
+    // The first food item type that corresponds to "berry position" items
+    const berryFoodTypes = this.getBerryFoodTypes();
+    for (const foodType of berryFoodTypes) {
+      if (points[foodType]) {
+        points[foodType].push(...berryPositions);
+      }
+    }
+
+    // Food items near trees
+    const treeFoodTypes = this.getTreeFoodTypes();
     const shuffledTrees = [...trees].sort(() => Math.random() - 0.5);
-    for (let i = 0; i < Math.min(12, shuffledTrees.length); i++) {
-      points.mushrooms.push({
-        x: shuffledTrees[i].x + (Math.random() * 30 - 15),
-        y: shuffledTrees[i].y + 20,
-      });
+    let treeIdx = 0;
+    for (const foodType of treeFoodTypes) {
+      if (!points[foodType]) continue;
+      const count = Math.min(12, shuffledTrees.length - treeIdx);
+      for (let i = 0; i < count && treeIdx < shuffledTrees.length; i++, treeIdx++) {
+        points[foodType].push({
+          x: shuffledTrees[treeIdx].x + (Math.random() * 30 - 15),
+          y: shuffledTrees[treeIdx].y + 20,
+        });
+      }
     }
 
-    // Acorns: under different trees
-    for (let i = 12; i < Math.min(24, shuffledTrees.length); i++) {
-      points.acorns.push({
-        x: shuffledTrees[i].x + (Math.random() * 30 - 15),
-        y: shuffledTrees[i].y + 20,
-      });
-    }
-
-    // Fish: along riverbanks
-    for (let row = 2; row < this.rows - 2; row += 3) {
-      for (let col = 0; col < this.cols; col++) {
-        const key = `${col},${row}`;
-        if (!riverCells.has(key)) continue;
-        // Is this a bank cell? (has a non-river neighbor)
-        const hasLand = !riverCells.has(`${col - 1},${row}`) || !riverCells.has(`${col + 1},${row}`);
-        if (hasLand) {
-          const wx = col * TILE_SIZE + TILE_SIZE / 2;
-          const wy = row * TILE_SIZE + TILE_SIZE / 2;
-          points.fish.push({ x: wx, y: wy });
-          break; // one per row-group
+    // Food items near water (fish / desert-fish)
+    const waterFoodTypes = this.getWaterFoodTypes();
+    if (waterFoodTypes.length > 0) {
+      const waterSpawnPoints = this.getWaterBankSpawns(waterCells);
+      for (const foodType of waterFoodTypes) {
+        if (points[foodType]) {
+          points[foodType].push(...waterSpawnPoints);
         }
       }
     }
 
-    // Planks: in clearings (skip first — that's the player spawn / house site)
-    for (let ci = 1; ci < clearings.length; ci++) {
-      const c = clearings[ci];
-      for (let i = 0; i < 3; i++) {
-        points.planks.push({
-          x: c.cx + (Math.random() * 80 - 40),
-          y: c.cy + (Math.random() * 80 - 40),
+    // Food items near rocks (beetles)
+    const rockFoodTypes = this.getRockFoodTypes();
+    for (const foodType of rockFoodTypes) {
+      if (!points[foodType]) continue;
+      for (const r of rockPositions) {
+        points[foodType].push({
+          x: r.x + (Math.random() * 40 - 20),
+          y: r.y + (Math.random() * 40 - 20),
         });
       }
     }
-    // More near map edges and scattered in the world
-    for (let i = 0; i < 10; i++) {
-      const edge = Math.floor(Math.random() * 4);
-      let wx, wy;
-      if (edge === 0) { wx = 80 + Math.random() * 200; wy = Math.random() * WORLD_HEIGHT; }
-      else if (edge === 1) { wx = WORLD_WIDTH - 80 - Math.random() * 200; wy = Math.random() * WORLD_HEIGHT; }
-      else if (edge === 2) { wx = Math.random() * WORLD_WIDTH; wy = 80 + Math.random() * 200; }
-      else { wx = Math.random() * WORLD_WIDTH; wy = WORLD_HEIGHT - 80 - Math.random() * 200; }
-      points.planks.push({ x: wx, y: wy });
-    }
-    // Scattered in woodland
-    for (let i = 0; i < 6; i++) {
-      points.planks.push({
-        x: 150 + Math.random() * (WORLD_WIDTH - 300),
-        y: 150 + Math.random() * (WORLD_HEIGHT - 300),
-      });
-    }
 
-    // Stones: near rock clusters + scattered
-    for (const r of rockPositions) {
-      points.stones.push({
-        x: r.x + (Math.random() * 40 - 20),
-        y: r.y + (Math.random() * 40 - 20),
-      });
-    }
-    for (let i = 0; i < 8; i++) {
-      points.stones.push({
-        x: 120 + Math.random() * (WORLD_WIDTH - 240),
-        y: 120 + Math.random() * (WORLD_HEIGHT - 240),
-      });
-    }
+    // Building materials — data-driven from portalStages costs
+    const buildMats = this.getBuildingMaterialTypes();
+    for (const mat of buildMats) {
+      if (!points[mat]) continue;
 
-    // Straw: in clearings (skip first — player spawn / house site) and random grassy areas
-    for (let ci = 1; ci < clearings.length; ci++) {
-      const c = clearings[ci];
-      points.straw.push({
-        x: c.cx + (Math.random() * 60 - 30),
-        y: c.cy + (Math.random() * 60 - 30),
-      });
-    }
-    for (let i = 0; i < 12; i++) {
-      points.straw.push({
-        x: 100 + Math.random() * (WORLD_WIDTH - 200),
-        y: 100 + Math.random() * (WORLD_HEIGHT - 200),
-      });
+      // In clearings (skip first — player start)
+      for (let ci = 1; ci < clearings.length; ci++) {
+        const c = clearings[ci];
+        for (let i = 0; i < 3; i++) {
+          points[mat].push({ x: c.cx + (Math.random() * 80 - 40), y: c.cy + (Math.random() * 80 - 40) });
+        }
+      }
+      // Near map edges
+      for (let i = 0; i < 10; i++) {
+        const edge = Math.floor(Math.random() * 4);
+        let wx, wy;
+        if (edge === 0) { wx = 80 + Math.random() * 200; wy = Math.random() * WORLD_HEIGHT; }
+        else if (edge === 1) { wx = WORLD_WIDTH - 80 - Math.random() * 200; wy = Math.random() * WORLD_HEIGHT; }
+        else if (edge === 2) { wx = Math.random() * WORLD_WIDTH; wy = 80 + Math.random() * 200; }
+        else { wx = Math.random() * WORLD_WIDTH; wy = WORLD_HEIGHT - 80 - Math.random() * 200; }
+        points[mat].push({ x: wx, y: wy });
+      }
+      // Near rocks
+      for (const r of rockPositions) {
+        points[mat].push({ x: r.x + (Math.random() * 40 - 20), y: r.y + (Math.random() * 40 - 20) });
+      }
+      // Scattered
+      for (let i = 0; i < 6; i++) {
+        points[mat].push({ x: 150 + Math.random() * (WORLD_WIDTH - 300), y: 150 + Math.random() * (WORLD_HEIGHT - 300) });
+      }
     }
 
     return points;
   }
 
-  // ─── 10. Animal spawn zones ───
+  // ─── Item spawn helpers (biome-aware) ───
 
-  computeAnimalSpawnZones(clearings, riverCells, trees) {
+  getBerryFoodTypes() {
+    // Items that spawn near berry/fruit bushes
+    const biomeId = this.biome.id;
+    if (biomeId === 'woodland') return ['berries'];
+    if (biomeId === 'desert') return ['cactus-fruit'];
+    return [];
+  }
+
+  getTreeFoodTypes() {
+    // Items that spawn near trees
+    const biomeId = this.biome.id;
+    if (biomeId === 'woodland') return ['mushrooms', 'acorns'];
+    if (biomeId === 'desert') return ['dates'];
+    return [];
+  }
+
+  getWaterFoodTypes() {
+    const biomeId = this.biome.id;
+    if (biomeId === 'woodland') return ['fish'];
+    if (biomeId === 'desert') return ['desert-fish'];
+    return [];
+  }
+
+  getRockFoodTypes() {
+    const biomeId = this.biome.id;
+    if (biomeId === 'desert') return ['beetles'];
+    return [];
+  }
+
+  getBuildingMaterialTypes() {
+    // Derive building material types from portalStages cost keys
+    const mats = new Set();
+    for (const stage of this.biome.portalStages) {
+      for (const key of Object.keys(stage.cost)) {
+        mats.add(key);
+      }
+    }
+    return [...mats];
+  }
+
+  getWaterBankSpawns(waterCells) {
+    const points = [];
+    if (this.biome.terrain.waterType === 'oasis') {
+      // For oases, spawn around the edges
+      for (const key of waterCells) {
+        const [col, row] = key.split(',').map(Number);
+        // Check if this is an edge cell (has non-water neighbor)
+        for (let dc = -1; dc <= 1; dc++) {
+          for (let dr = -1; dr <= 1; dr++) {
+            if (dc === 0 && dr === 0) continue;
+            const nk = `${col + dc},${row + dr}`;
+            if (!waterCells.has(nk)) {
+              const wx = (col + dc) * TILE_SIZE + TILE_SIZE / 2;
+              const wy = (row + dr) * TILE_SIZE + TILE_SIZE / 2;
+              points.push({ x: wx, y: wy });
+              break; // one per water cell
+            }
+          }
+          if (points.length > 0 && points[points.length - 1].x === ((col + dc) * TILE_SIZE + TILE_SIZE / 2)) break;
+        }
+      }
+    } else {
+      // River: sample bank positions
+      for (let row = 2; row < this.rows - 2; row += 3) {
+        for (let col = 0; col < this.cols; col++) {
+          const key = `${col},${row}`;
+          if (!waterCells.has(key)) continue;
+          const hasLand = !waterCells.has(`${col - 1},${row}`) || !waterCells.has(`${col + 1},${row}`);
+          if (hasLand) {
+            const wx = col * TILE_SIZE + TILE_SIZE / 2;
+            const wy = row * TILE_SIZE + TILE_SIZE / 2;
+            points.push({ x: wx, y: wy });
+            break;
+          }
+        }
+      }
+    }
+    return points;
+  }
+
+  // ─── Animal spawn zones ───
+
+  computeAnimalSpawnZones(clearings, waterCells, trees) {
     const zones = {};
-    const cx = WORLD_WIDTH / 2;
-    const cy = WORLD_HEIGHT / 2;
+    const animals = this.biome.animals;
 
+    for (const [animalType, config] of Object.entries(animals)) {
+      // Generic spawn logic that works for any biome
+      if (!config.shy) {
+        // Non-shy: near clearings or water
+        zones[animalType] = this.pickSpawnPoints(
+          config.count * 2, trees, clearings,
+          () => true
+        );
+      } else {
+        // Shy: prefer edges and dense areas
+        zones[animalType] = this.pickSpawnPoints(
+          config.count * 2, trees, clearings,
+          (x, y) => {
+            return x < 800 || x > WORLD_WIDTH - 800 || y < 600 || y > WORLD_HEIGHT - 600;
+          }
+        );
+      }
+    }
+
+    // Override with biome-specific placement for special animals
+    if (this.biome.id === 'woodland') {
+      this.computeWoodlandAnimalZones(zones, clearings, waterCells, trees);
+    } else if (this.biome.id === 'desert') {
+      this.computeDesertAnimalZones(zones, clearings, waterCells, trees);
+    }
+
+    return zones;
+  }
+
+  computeWoodlandAnimalZones(zones, clearings, waterCells, trees) {
     // Bears: deep forest (far from clearings)
     zones.bear = this.pickSpawnPoints(4, trees, clearings, (x, y) => {
-      // Prefer points far from all clearings
       let minDist = Infinity;
       for (const c of clearings) {
         minDist = Math.min(minDist, this.dist(x, y, c.cx, c.cy));
@@ -563,7 +677,7 @@ export default class MapGenerator {
       return x < 600 || x > WORLD_WIDTH - 600 || y < 400 || y > WORLD_HEIGHT - 400;
     });
 
-    // Badgers: near rocks and dense tree areas
+    // Badgers: near dense tree areas
     zones.badger = this.pickSpawnPoints(4, trees, clearings, (x, y) => {
       let nearbyTrees = 0;
       for (const t of trees) {
@@ -572,15 +686,14 @@ export default class MapGenerator {
       return nearbyTrees >= 3;
     });
 
-    // Capybaras: near the river
+    // Capybaras: near river
     const riverPoints = [];
-    for (const key of riverCells) {
+    for (const key of waterCells) {
       const [col, row] = key.split(',').map(Number);
-      if (row % 6 === 0) { // sample every 6th row
-        // Find a bank position (non-river neighbor)
+      if (row % 6 === 0) {
         for (let dc = -2; dc <= 2; dc++) {
           const nk = `${col + dc},${row}`;
-          if (!riverCells.has(nk)) {
+          if (!waterCells.has(nk)) {
             riverPoints.push({
               x: (col + dc) * TILE_SIZE + TILE_SIZE / 2,
               y: row * TILE_SIZE + TILE_SIZE / 2,
@@ -594,18 +707,15 @@ export default class MapGenerator {
       ? riverPoints.sort(() => Math.random() - 0.5).slice(0, 4)
       : this.pickSpawnPoints(4, trees, clearings, () => true);
 
-    // Deer: open areas near clearings
+    // Deer: near clearings
     zones.deer = [];
     for (const c of clearings) {
       for (let i = 0; i < 3; i++) {
-        zones.deer.push({
-          x: c.cx + (Math.random() * 300 - 150),
-          y: c.cy + (Math.random() * 300 - 150),
-        });
+        zones.deer.push({ x: c.cx + (Math.random() * 300 - 150), y: c.cy + (Math.random() * 300 - 150) });
       }
     }
 
-    // Rabbits: everywhere in grass
+    // Rabbits: everywhere
     zones.rabbit = this.pickSpawnPoints(10, trees, clearings, () => true);
 
     // Foxes: forest edges
@@ -615,8 +725,62 @@ export default class MapGenerator {
 
     // Birds: everywhere
     zones.bird = this.pickSpawnPoints(8, trees, clearings, () => true);
+  }
 
-    return zones;
+  computeDesertAnimalZones(zones, clearings, waterCells, trees) {
+    // Camels: open desert, not too close to edges
+    zones.camel = this.pickSpawnPoints(4, trees, clearings, (x, y) => {
+      return x > 300 && x < WORLD_WIDTH - 300 && y > 300 && y < WORLD_HEIGHT - 300;
+    });
+
+    // Crocodiles: near oases
+    const oasisPoints = [];
+    for (const key of waterCells) {
+      const [col, row] = key.split(',').map(Number);
+      for (let dc = -2; dc <= 2; dc++) {
+        const nk = `${col + dc},${row}`;
+        if (!waterCells.has(nk)) {
+          oasisPoints.push({
+            x: (col + dc) * TILE_SIZE + TILE_SIZE / 2,
+            y: row * TILE_SIZE + TILE_SIZE / 2,
+          });
+          break;
+        }
+      }
+    }
+    zones.crocodile = oasisPoints.length >= 4
+      ? oasisPoints.sort(() => Math.random() - 0.5).slice(0, 4)
+      : this.pickSpawnPoints(4, trees, clearings, () => true);
+
+    // Snakes: near rocks (scattered)
+    zones.snake = this.pickSpawnPoints(6, trees, clearings, (x, y) => {
+      return x > 200 && x < WORLD_WIDTH - 200;
+    });
+
+    // Scorpions: near rocks, desert edges
+    zones.scorpion = this.pickSpawnPoints(6, trees, clearings, (x, y) => {
+      return x < 600 || x > WORLD_WIDTH - 600 || y > WORLD_HEIGHT - 500;
+    });
+
+    // Lizards: everywhere in open sand
+    zones.lizard = this.pickSpawnPoints(8, trees, clearings, () => true);
+
+    // Vultures: edges and far from clearings
+    zones.vulture = this.pickSpawnPoints(6, trees, clearings, (x, y) => {
+      let minDist = Infinity;
+      for (const c of clearings) {
+        minDist = Math.min(minDist, this.dist(x, y, c.cx, c.cy));
+      }
+      return minDist > 350;
+    });
+
+    // Fennec foxes: scattered, prefer edges
+    zones.fennec = this.pickSpawnPoints(8, trees, clearings, (x, y) => {
+      return x < 800 || x > WORLD_WIDTH - 800 || y < 600 || y > WORLD_HEIGHT - 600;
+    });
+
+    // Roadrunners: everywhere
+    zones.roadrunner = this.pickSpawnPoints(8, trees, clearings, () => true);
   }
 
   pickSpawnPoints(count, trees, clearings, filter) {
@@ -627,19 +791,16 @@ export default class MapGenerator {
       const x = 100 + Math.random() * (WORLD_WIDTH - 200);
       const y = 100 + Math.random() * (WORLD_HEIGHT - 200);
 
-      // Not in clearings
       const col = Math.floor(x / TILE_SIZE);
       const row = Math.floor(y / TILE_SIZE);
       if (this.isInClearing(col, row, clearings)) continue;
 
-      // Not on trees
       let onTree = false;
       for (const t of trees) {
         if (this.dist(x, y, t.x, t.y) < 50) { onTree = true; break; }
       }
       if (onTree) continue;
 
-      // Not too close to other points
       let tooClose = false;
       for (const p of points) {
         if (this.dist(x, y, p.x, p.y) < 100) { tooClose = true; break; }

@@ -1,4 +1,5 @@
-import { WORLD_WIDTH, WORLD_HEIGHT, TILE_SIZE, ITEM_SPAWN_COUNTS, ITEM_RESPAWN_TIME, INTERACTION_RANGE, ANIMALS, PORTAL_STAGES, PORTAL_ACTIVATION_RANGE } from '../config.js';
+import { WORLD_WIDTH, WORLD_HEIGHT, TILE_SIZE, ITEM_RESPAWN_TIME, INTERACTION_RANGE, PORTAL_ACTIVATION_RANGE } from '../config.js';
+import { getBiome, findAnimalConfig } from '../biomes/biomeRegistry.js';
 import MapGenerator from '../systems/MapGenerator.js';
 import Player from '../entities/Player.js';
 import Collectible from '../entities/Collectible.js';
@@ -14,8 +15,15 @@ export default class GameScene extends Phaser.Scene {
   }
 
   create() {
+    // ─── Biome selection ───
+    const biomeId = this.game.registry.get('currentBiome') || 'woodland';
+    this.biome = getBiome(biomeId);
+
+    // Set camera background color from biome
+    this.cameras.main.setBackgroundColor(this.biome.backgroundColor);
+
     // ─── World generation ───
-    const mapGen = new MapGenerator(this);
+    const mapGen = new MapGenerator(this, this.biome);
     this.mapData = mapGen.generate();
 
     this.physics.world.setBounds(0, 0, WORLD_WIDTH, WORLD_HEIGHT);
@@ -79,6 +87,13 @@ export default class GameScene extends Phaser.Scene {
     this.spawnAnimals();
 
     this.physics.add.collider(this.animalsGroup, this.mapData.obstacles);
+
+    // ─── Restore tamed animals from previous biome ───
+    const tamedData = this.game.registry.get('tamedAnimals');
+    if (tamedData && tamedData.length > 0) {
+      this.restoreTamedAnimals(tamedData);
+      this.game.registry.remove('tamedAnimals');
+    }
 
     // ─── Water shimmer ───
     this.waterTiles = this.mapData.waterTiles || [];
@@ -428,10 +443,11 @@ export default class GameScene extends Phaser.Scene {
 
   spawnInitialItems() {
     const spawnPoints = this.mapData.itemSpawnPoints;
+    const spawnCounts = this.biome.itemSpawnCounts;
 
     for (const [itemType, positions] of Object.entries(spawnPoints)) {
       const shuffled = Phaser.Utils.Array.Shuffle([...positions]);
-      const spawnCount = ITEM_SPAWN_COUNTS[itemType] || 6;
+      const spawnCount = spawnCounts[itemType] || 6;
       const toSpawn = shuffled.slice(0, spawnCount);
       const remaining = shuffled.slice(spawnCount);
 
@@ -567,8 +583,8 @@ export default class GameScene extends Phaser.Scene {
       }
     }
 
-    // Create building manager now that we know the position
-    this.portalManager = new BuildingManager(this, clearing.cx, clearing.cy);
+    // Create building manager with biome-specific portal stages
+    this.portalManager = new BuildingManager(this, clearing.cx, clearing.cy, this.biome.portalStages);
     this.portalManager.portalSprite = this.portalSprite;
   }
 
@@ -590,7 +606,7 @@ export default class GameScene extends Phaser.Scene {
     EventBus.emit('show-build-menu', {
       stageName: next.name,
       stageNumber: this.portalManager.stage + 1,
-      totalStages: PORTAL_STAGES.length,
+      totalStages: this.biome.portalStages.length,
       materials,
       canBuild,
     });
@@ -640,14 +656,13 @@ export default class GameScene extends Phaser.Scene {
     EventBus.emit('close-build-menu');
   }
 
-  // ─── Portal enter (Phase 8 placeholder) ───
+  // ─── Portal enter ───
 
   enterPortal() {
-    // Prevent re-entry
     if (this._portalEntered) return;
     this._portalEntered = true;
 
-    // Stop player
+    // Stop player movement
     this.player.target = null;
     this.player.body.setVelocity(0, 0);
 
@@ -655,13 +670,86 @@ export default class GameScene extends Phaser.Scene {
       this.game.audioManager.playPortalEnter();
     }
 
-    // Big celebration burst
+    // Celebration burst
     this.spawnBuildParticles(this.portalPlotPosition.x, this.portalPlotPosition.y, true);
     this.time.delayedCall(300, () => {
       this.spawnBuildParticles(this.portalPlotPosition.x, this.portalPlotPosition.y, true);
     });
 
-    // TODO Phase 9: fade camera, serialize tamed animals, switch biome, restart scene
+    // Determine next biome
+    const nextBiomeId = this.biome.nextBiome;
+    if (!nextBiomeId) {
+      // No next biome — victory celebration (final biome reached)
+      this.time.delayedCall(800, () => {
+        for (let i = 0; i < 3; i++) {
+          this.time.delayedCall(i * 300, () => {
+            this.spawnBuildParticles(
+              this.portalPlotPosition.x + (Math.random() - 0.5) * 100,
+              this.portalPlotPosition.y + (Math.random() - 0.5) * 80,
+              true
+            );
+          });
+        }
+        this._portalEntered = false;
+      });
+      return;
+    }
+
+    // Serialize tamed animals for the next biome
+    const tamedData = [];
+    for (const animal of this.animals) {
+      if (animal.active && animal.tamed) {
+        tamedData.push({
+          type: animal.animalType,
+          followerIndex: animal.followerIndex,
+        });
+      }
+    }
+
+    // Store transition data in registry
+    this.game.registry.set('tamedAnimals', tamedData);
+    this.game.registry.set('currentBiome', nextBiomeId);
+
+    // Fade out then restart
+    this.time.delayedCall(600, () => {
+      this.cameras.main.fadeOut(800, 0, 0, 0);
+
+      this.cameras.main.once('camerafadeoutcomplete', () => {
+        // Stop UIScene so it restarts fresh
+        this.scene.stop('UIScene');
+        // Restart GameScene with new biome
+        this.scene.restart();
+        // Re-launch UIScene
+        this.scene.launch('UIScene');
+      });
+    });
+  }
+
+  // ─── Restore tamed animals from previous biome ───
+
+  restoreTamedAnimals(tamedData) {
+    for (const { type, followerIndex } of tamedData) {
+      const config = findAnimalConfig(type);
+      if (!config) continue;
+
+      const offsetAngle = (followerIndex / Math.max(tamedData.length, 1)) * Math.PI * 2;
+      const offsetDist = 60 + followerIndex * 30;
+      const x = Phaser.Math.Clamp(
+        this.player.x + Math.cos(offsetAngle) * offsetDist,
+        40, WORLD_WIDTH - 40
+      );
+      const y = Phaser.Math.Clamp(
+        this.player.y + Math.sin(offsetAngle) * offsetDist,
+        40, WORLD_HEIGHT - 40
+      );
+
+      const animal = new Animal(this, x, y, config);
+      this.animalsGroup.add(animal);
+      this.animals.push(animal);
+
+      animal.setTamed(followerIndex);
+      this.tamedCount = Math.max(this.tamedCount, followerIndex + 1);
+    }
   }
 
   // ─── Portal sparkles (around completed portal) ───
@@ -742,14 +830,24 @@ export default class GameScene extends Phaser.Scene {
     particle.setDepth(9000);
     particle.setAlpha(0.6);
     particle.setScale(0.5 + Math.random() * 0.4);
-    if (Math.random() > 0.5) {
-      particle.setTint(0x88CC44);
+
+    // Biome-appropriate particle tints
+    if (this.biome.id === 'desert') {
+      if (Math.random() > 0.5) {
+        particle.setTint(0xD4A574);
+      } else {
+        particle.setTint(0xE0C088);
+      }
     } else {
-      particle.setTint(Phaser.Display.Color.GetColor(
-        200 + Math.floor(Math.random() * 55),
-        100 + Math.floor(Math.random() * 100),
-        180 + Math.floor(Math.random() * 75)
-      ));
+      if (Math.random() > 0.5) {
+        particle.setTint(0x88CC44);
+      } else {
+        particle.setTint(Phaser.Display.Color.GetColor(
+          200 + Math.floor(Math.random() * 55),
+          100 + Math.floor(Math.random() * 100),
+          180 + Math.floor(Math.random() * 75)
+        ));
+      }
     }
 
     this.ambientParticles.push(particle);
@@ -819,8 +917,9 @@ export default class GameScene extends Phaser.Scene {
 
   spawnAnimals() {
     const zones = this.mapData.animalSpawnZones;
+    const animals = this.biome.animals;
 
-    for (const [animalType, config] of Object.entries(ANIMALS)) {
+    for (const [animalType, config] of Object.entries(animals)) {
       const spawnPoints = zones[animalType];
       if (!spawnPoints || spawnPoints.length === 0) continue;
 

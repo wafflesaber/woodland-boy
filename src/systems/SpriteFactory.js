@@ -57,6 +57,11 @@ export default class SpriteFactory {
     this.generatePortalStages();
     this.generateUI();
     this.generateParticles();
+    // Desert biome textures
+    this.generateDesertTerrain();
+    this.generateDesertDecorations();
+    this.generateDesertAnimals();
+    this.generateDesertItems();
   }
 
   // ─── PLAYER (8x8 = 32x32) ───
@@ -852,6 +857,423 @@ export default class SpriteFactory {
       [_, Sw, _],
       [Sw, '#FFFFEE', Sw],
       [_, Sw, _],
+    ]);
+  }
+
+  // ═══════════════════════════════════════════
+  // DESERT BIOME TEXTURES
+  // ═══════════════════════════════════════════
+
+  // ─── DESERT TERRAIN (16x16 = 64x64) ───
+
+  generateDesertTerrain() {
+    // Sand variants — warm tans
+    for (let i = 0; i < 3; i++) {
+      this.tex(`desert-sand-${i}`, this.noise(16, 16, ['#EDC9AF', '#D4A574', '#E0B88A', '#DEB887', '#C8A06E']));
+    }
+
+    // Packed sand for clearings — slightly darker, more uniform
+    this.tex('desert-packed', this.noise(16, 16, ['#C8A06E', '#BF9860', '#B89058', '#C49A68']));
+
+    // Oasis bank — green-tinted sand near water
+    this.tex('desert-oasis-bank', this.noise(16, 16, ['#A8C070', '#98B060', '#B0C878', '#90A858']));
+  }
+
+  // ─── DESERT DECORATIONS ───
+
+  generateDesertDecorations() {
+    const _ = null;
+
+    // Palm trunk (4x10 grid, scale 4 = 16x40) — thinner + taller than woodland trees
+    const Pt = '#8B7355'; // palm trunk brown
+    const Pd = '#6B5B45'; // dark bark
+    this.tex('palm-trunk', [
+      [_, Pt, Pt, _],
+      [_, Pd, Pt, _],
+      [_, Pt, Pd, _],
+      [_, Pd, Pt, _],
+      [_, Pt, Pt, _],
+      [_, Pd, Pt, _],
+      [_, Pt, Pd, _],
+      [_, Pt, Pt, _],
+      [_, Pd, Pt, _],
+      [_, Pt, Pt, _],
+    ]);
+
+    // Palm canopy variant 1 (10x6 grid) — fronds spreading out
+    const Fg = '#228B22'; // frond green
+    const Fl = '#2E8B40'; // lighter frond
+    const Fd = '#1A6B1A'; // darker frond
+    this.tex('palm-canopy-1', [
+      [_, _, Fg, Fl, _, _, Fl, Fg, _, _],
+      [Fg, Fl, Fd, Fg, Fl, Fg, Fd, Fl, Fg, _],
+      [_, Fg, Fg, Fl, Fg, Fg, Fl, Fg, Fg, _],
+      [_, _, Fg, Fg, Fd, Fd, Fg, Fg, _, _],
+      [_, _, _, Fd, Fg, Fg, Fd, _, _, _],
+      [_, _, _, _, Fg, Fg, _, _, _, _],
+    ]);
+
+    this.tex('palm-canopy-2', [
+      [_, Fg, _, Fl, Fg, Fg, Fl, _, Fg, _],
+      [_, Fl, Fg, Fd, Fl, Fg, Fd, Fg, Fl, _],
+      [_, _, Fg, Fg, Fg, Fg, Fg, Fg, _, _],
+      [_, _, _, Fl, Fd, Fd, Fl, _, _, _],
+      [_, _, _, Fg, Fg, Fg, Fg, _, _, _],
+      [_, _, _, _, Fd, Fd, _, _, _, _],
+    ]);
+
+    // Cactus (6x6 grid = 24x24) — green, spiky
+    const Cg = '#2E8B57'; // cactus green
+    const Cd = '#1E6B3E'; // dark green
+    const Cs = '#F0E68C'; // spine/highlight
+    this.tex('cactus', [
+      [_, _, Cg, Cg, _, _],
+      [_, Cs, Cg, Cd, Cs, _],
+      [Cg, Cd, Cg, Cg, Cd, Cg],
+      [Cg, Cs, Cg, Cg, Cs, Cg],
+      [_, _, Cg, Cg, _, _],
+      [_, _, Cd, Cd, _, _],
+    ]);
+
+    // Fruit cactus (6x6 grid) — cactus with red fruit
+    const Cf = '#FF4500'; // cactus fruit
+    this.tex('cactus-fruit', [
+      [_, _, Cg, Cg, _, _],
+      [_, Cf, Cg, Cd, Cf, _],
+      [Cg, Cd, Cg, Cg, Cd, Cg],
+      [Cg, Cs, Cg, Cg, Cs, Cg],
+      [_, _, Cg, Cg, _, _],
+      [_, _, Cd, Cd, _, _],
+    ]);
+
+    // Sandstone rock (6x5 grid = 24x20) — warmer tones
+    const Sr = '#D2A060'; // sandstone
+    const Sd = '#B8863C'; // darker
+    const Sl = '#E8C080'; // lighter
+    this.tex('sandstone-rock', [
+      [_, _, Sr, Sr, _, _],
+      [_, Sr, Sl, Sr, Sr, _],
+      [Sr, Sl, Sr, Sd, Sr, Sr],
+      [Sr, Sd, Sr, Sr, Sr, Sr],
+      [_, Sr, Sr, Sd, Sr, _],
+    ]);
+
+    // Desert flowers (3x3 = 12x12)
+    const Ds = '#C8A06E'; // desert stem (sand-colored)
+    this.tex('desert-flower-orange', [
+      [_, '#FF8C00', _],
+      ['#FF8C00', '#FFD700', '#FF8C00'],
+      [_, Ds, _],
+    ]);
+    this.tex('desert-flower-pink', [
+      [_, '#FF69B4', _],
+      ['#FF69B4', '#FFFF00', '#FF69B4'],
+      [_, Ds, _],
+    ]);
+
+    // Tumbleweed (4x4 = 16x16) — dry, round
+    const Tw = '#C8A06E'; // dry tan
+    const Td = '#A08050'; // darker
+    this.tex('tumbleweed', [
+      [_, Tw, Tw, _],
+      [Tw, Td, Tw, Tw],
+      [Tw, Tw, Td, Tw],
+      [_, Tw, Tw, _],
+    ]);
+  }
+
+  // ─── DESERT ANIMALS (8x8 or 6x6) ───
+
+  generateDesertAnimals() {
+    const _ = null;
+    const Bk = '#333333';
+
+    // Camel — warm tan/brown, prominent humps, clear side profile (8x8)
+    const Ca = '#D2A060'; // body tan
+    const Cl = '#A07840'; // darker shading
+    const Ch = '#E8C880'; // hump highlight
+    const Cn = '#2A1A0A'; // nose
+    this.tex('animal-camel-1', [
+      [_, _, _, Ch, Ch, _, _, _],
+      [_, Ca, Ch, Ca, Ca, Ch, _, _],
+      [Ca, Bk, Ca, Ca, Ca, Ca, Ca, _],
+      [Ca, Ca, Cl, Ca, Ca, Cl, Ca, Cn],
+      [_, Ca, Ca, Ca, Ca, Ca, Ca, _],
+      [_, Ca, _, Ca, Ca, _, Ca, _],
+      [_, Ca, _, _, _, _, Ca, _],
+      [_, Cl, _, _, _, _, Cl, _],
+    ]);
+    this.tex('animal-camel-2', [
+      [_, _, _, Ch, Ch, _, _, _],
+      [_, Ca, Ch, Ca, Ca, Ch, _, _],
+      [Ca, Bk, Ca, Ca, Ca, Ca, Ca, _],
+      [Ca, Ca, Cl, Ca, Ca, Cl, Ca, Cn],
+      [_, Ca, Ca, Ca, Ca, Ca, Ca, _],
+      [_, _, Ca, Ca, Ca, Ca, _, _],
+      [_, Ca, _, _, _, _, Ca, _],
+      [_, Cl, _, _, _, _, Cl, _],
+    ]);
+
+    // Crocodile — dark green with yellow jaw, bumpy back, long (8x8)
+    const Cg = '#3A6B30'; // dark green body
+    const Cd = '#2A4B20'; // ridge bumps
+    const Cy = '#CCCC00'; // yellow eye
+    const Cj = '#5A8B40'; // lighter jaw
+    this.tex('animal-crocodile-1', [
+      [_, _, _, _, _, _, _, _],
+      [_, _, _, Cd, _, Cd, _, _],
+      [Cg, Cg, Cd, Cg, Cd, Cg, Cd, _],
+      [Cy, Cg, Cg, Cg, Cg, Cg, Cg, Cg],
+      [Cj, Cj, Cg, Cg, Cg, Cg, Cg, Cg],
+      [_, _, Cg, _, _, Cg, _, Cg],
+      [_, _, Bk, _, _, Bk, _, _],
+      [_, _, _, _, _, _, _, _],
+    ]);
+    this.tex('animal-crocodile-2', [
+      [_, _, _, _, _, _, _, _],
+      [_, _, _, Cd, _, Cd, _, _],
+      [Cg, Cg, Cd, Cg, Cd, Cg, Cd, _],
+      [Cy, Cg, Cg, Cg, Cg, Cg, Cg, Cg],
+      [Cj, Cj, Cg, Cg, Cg, Cg, Cg, Cg],
+      [_, Cg, _, Cg, Cg, _, Cg, _],
+      [_, Bk, _, _, _, _, Bk, _],
+      [_, _, _, _, _, _, _, _],
+    ]);
+
+    // Snake — bright yellow-green with red diamond pattern, coiled (6x6)
+    const Sg = '#8BC34A'; // bright yellow-green
+    const Sr = '#CC2200'; // red diamond markings
+    const Se = '#FF0000'; // red tongue
+    const Sy = '#FFFF00'; // yellow eye
+    this.tex('animal-snake-1', [
+      [_, _, Sg, Sg, _, _],
+      [_, Sg, Sr, Sr, Sg, _],
+      [Sg, Sy, Sg, Sg, Sr, Sg],
+      [Sg, Sg, Sr, Sr, Sg, Se],
+      [_, Sg, Sg, Sg, Sg, _],
+      [_, _, Sg, Sg, _, _],
+    ]);
+    this.tex('animal-snake-2', [
+      [_, _, Sg, Sg, _, _],
+      [_, Sg, Sr, Sr, Sg, _],
+      [Sg, Sy, Sg, Sg, Sr, _],
+      [Sg, Sg, Sr, Sr, Sg, Se],
+      [_, _, Sg, Sg, _, Se],
+      [_, _, Sg, Sg, _, _],
+    ]);
+
+    // Scorpion — jet black with bright red pincers and curled stinger (6x6)
+    const Sc = '#1A1A1A'; // black body
+    const St = '#FF2200'; // red stinger
+    const Sp = '#FF4400'; // red pincers
+    const Ss = '#3A3A3A'; // body highlight
+    this.tex('animal-scorpion-1', [
+      [_, _, _, _, St, St],
+      [Sp, _, _, _, Ss, St],
+      [_, Sp, Sc, Sc, Sc, _],
+      [_, _, Bk, Ss, Bk, _],
+      [_, Sp, Sc, Sc, Sc, _],
+      [Sp, _, Sc, _, Sc, _],
+    ]);
+    this.tex('animal-scorpion-2', [
+      [_, _, _, _, _, St],
+      [Sp, _, _, _, St, St],
+      [_, Sp, Sc, Sc, Sc, _],
+      [_, _, Bk, Ss, Bk, _],
+      [_, Sp, Sc, Sc, Sc, _],
+      [Sp, _, Sc, _, Sc, _],
+    ]);
+
+    // Lizard — bright electric blue with yellow belly, distinctive (6x6)
+    const Lg = '#1E90FF'; // electric blue
+    const Ld = '#0066CC'; // darker blue
+    const Ly = '#FFD700'; // yellow belly
+    this.tex('animal-lizard-1', [
+      [_, _, _, _, _, _],
+      [_, Lg, _, _, _, _],
+      [_, Bk, Lg, Ld, Lg, Lg],
+      [_, Lg, Ly, Ly, Ld, _],
+      [_, _, Lg, _, Lg, _],
+      [_, _, Ld, _, Ld, _],
+    ]);
+    this.tex('animal-lizard-2', [
+      [_, _, _, _, _, _],
+      [_, Lg, _, _, _, _],
+      [_, Bk, Lg, Ld, Lg, Lg],
+      [_, Lg, Ly, Ly, Ld, _],
+      [_, Lg, _, Lg, _, _],
+      [_, Ld, _, Ld, _, _],
+    ]);
+
+    // Vulture — black with bright white ruff, red bald head (6x6)
+    const Vb = '#1A1A1A'; // black body
+    const Vw = '#FFFFFF'; // white ruff
+    const Vr = '#CC0000'; // red head
+    const Vg = '#3A3A3A'; // wing gray
+    this.tex('animal-vulture-1', [
+      [_, _, Vr, Vr, _, _],
+      [_, Vw, Bk, Vw, _, _],
+      [Vg, Vb, Vw, Vw, Vb, Vg],
+      [_, Vb, Vb, Vb, Vb, _],
+      [_, _, Vb, _, Vb, _],
+      [_, _, Bk, _, Bk, _],
+    ]);
+    this.tex('animal-vulture-2', [
+      [_, _, Vr, Vr, _, _],
+      [_, Vw, Bk, Vw, _, _],
+      [_, Vb, Vw, Vw, Vb, Vg],
+      [Vg, Vb, Vb, Vb, Vb, _],
+      [_, _, Vb, _, Vb, _],
+      [_, _, Bk, _, Bk, _],
+    ]);
+
+    // Fennec Fox — cream/white with HUGE pink-lined ears, big dark eyes (8x8)
+    const Ft = '#FAEBD7'; // cream body (lighter than sand so it pops)
+    const Fe = '#FFB6C1'; // pink ear inner
+    const Fw = '#FFFFFF'; // white belly
+    const Fb = '#1A1A1A'; // big dark eyes
+    const Fn = '#333333'; // nose
+    this.tex('animal-fennec-1', [
+      [Ft, Ft, _, _, _, _, Ft, Ft],
+      [Fe, Ft, Ft, _, _, Ft, Ft, Fe],
+      [_, Ft, Ft, Ft, Ft, Ft, Ft, _],
+      [_, Fb, Ft, Ft, Ft, Ft, Fb, _],
+      [_, Ft, Ft, Fn, Ft, Ft, Ft, _],
+      [_, _, Fw, Fw, Fw, Fw, _, _],
+      [_, _, Ft, _, _, Ft, _, _],
+      [_, _, Bk, _, _, Bk, _, _],
+    ]);
+    this.tex('animal-fennec-2', [
+      [Ft, Ft, _, _, _, _, Ft, Ft],
+      [Fe, Ft, Ft, _, _, Ft, Ft, Fe],
+      [_, Ft, Ft, Ft, Ft, Ft, Ft, _],
+      [_, Fb, Ft, Ft, Ft, Ft, Fb, _],
+      [_, Ft, Ft, Fn, Ft, Ft, Ft, _],
+      [_, _, Fw, Fw, Fw, Fw, _, _],
+      [_, Ft, _, Ft, Ft, _, Ft, _],
+      [_, Bk, _, _, _, _, Bk, _],
+    ]);
+
+    // Roadrunner — blue-black with white chest stripe, orange beak, tall crest (6x6)
+    const Rb = '#2E2E5E'; // dark blue-black body
+    const Rw = '#FFFFFF'; // white chest stripe
+    const Rc = '#4A4A7A'; // blue-purple crest
+    const Ro = '#FF8C00'; // orange beak
+    this.tex('animal-roadrunner-1', [
+      [_, _, Rc, Rc, _, _],
+      [_, Rb, Bk, Rb, _, _],
+      [Ro, Rb, Rb, Rb, Rb, _],
+      [_, Rw, Rb, Rw, Rb, _],
+      [_, _, Rb, _, _, _],
+      [_, _, '#FF8C00', _, '#FF8C00', _],
+    ]);
+    this.tex('animal-roadrunner-2', [
+      [_, _, Rc, Rc, _, _],
+      [_, Rb, Bk, Rb, _, _],
+      [Ro, Rb, Rb, Rb, Rb, _],
+      [_, Rw, Rb, Rw, Rb, _],
+      [_, Rb, _, _, Rb, _],
+      [_, '#FF8C00', _, _, '#FF8C00', _],
+    ]);
+  }
+
+  // ─── DESERT ITEMS (6x6 = 24x24) ───
+
+  generateDesertItems() {
+    const _ = null;
+
+    // Dates — cluster of brown dates on a green stem
+    const Dd = '#8B4513'; // date brown
+    const Dl = '#A0522D'; // lighter date
+    const Dg = '#228B22'; // green stem
+    this.tex('item-dates', [
+      [_, _, Dg, Dg, _, _],
+      [_, Dg, _, _, Dg, _],
+      [Dd, Dl, Dd, Dl, Dd, Dl],
+      [Dl, Dd, Dl, Dd, Dl, Dd],
+      [_, Dd, Dl, Dd, Dl, _],
+      [_, _, Dd, Dd, _, _],
+    ]);
+
+    // Beetles — small dark critter
+    const Bb = '#2F1B0E'; // dark brown
+    const Bs = '#4A3020'; // shell
+    const Bg = '#556B2F'; // green sheen
+    this.tex('item-beetles', [
+      [_, _, Bb, Bb, _, _],
+      [_, Bb, Bg, Bg, Bb, _],
+      [Bb, Bs, Bb, Bb, Bs, Bb],
+      [_, Bs, Bg, Bg, Bs, _],
+      [_, Bb, Bb, Bb, Bb, _],
+      [_, _, _, _, _, _],
+    ]);
+
+    // Cactus fruit — round red/pink fruit
+    const Cf = '#FF4500'; // bright red-orange
+    const Cl = '#FF6347'; // lighter
+    const Cs = '#228B22'; // green stem bit
+    this.tex('item-cactus-fruit', [
+      [_, _, Cs, Cs, _, _],
+      [_, Cf, Cl, Cf, Cf, _],
+      [Cf, Cl, Cf, Cf, Cl, Cf],
+      [Cf, Cf, Cf, Cl, Cf, Cf],
+      [_, Cf, Cf, Cf, Cf, _],
+      [_, _, Cf, Cf, _, _],
+    ]);
+
+    // Desert fish — slightly different color from woodland fish (more golden)
+    const Df = '#DAA520'; // golden body
+    const Dl2 = '#F0D080'; // light belly
+    const De = '#333333'; // eye
+    this.tex('item-desert-fish', [
+      [_, _, _, Df, _, _],
+      [_, Df, Df, Df, Df, _],
+      [Df, Df, De, Df, Dl2, Df],
+      [_, Df, Df, Dl2, Dl2, _],
+      [_, Df, Df, Df, Df, _],
+      [_, _, _, Df, _, _],
+    ]);
+
+    // Urn — terracotta pot with decorative band
+    const Ut = '#B8602A'; // terracotta
+    const Ud = '#8B4513'; // dark clay
+    const Ug = '#DAA520'; // gold band
+    const Ui = '#4A2A0A'; // dark interior opening
+    this.tex('item-urns', [
+      [_, _, Ui, Ui, _, _],
+      [_, Ut, Ug, Ug, Ut, _],
+      [Ut, Ug, Ut, Ut, Ug, Ut],
+      [Ut, Ut, Ud, Ud, Ut, Ut],
+      [_, Ut, Ut, Ut, Ut, _],
+      [_, _, Ud, Ud, _, _],
+    ]);
+
+    // Mummy — wrapped figure with glowing eyes
+    const Mw = '#E8DCC8'; // linen wrapping
+    const Md = '#C8B8A0'; // darker wrapping
+    const Mg = '#00FF88'; // glowing green eyes
+    const Ms = '#A09080'; // shadow/gap in wraps
+    this.tex('item-mummies', [
+      [_, Mw, Md, Md, Mw, _],
+      [_, Md, Mg, Ms, Mg, _],
+      [_, Mw, Md, Mw, Md, _],
+      [_, Ms, Mw, Md, Mw, _],
+      [_, Mw, Ms, Mw, Ms, _],
+      [_, _, Md, Md, _, _],
+    ]);
+
+    // Scepter — ankh-shaped golden staff
+    const Ag = '#FFD700'; // gold
+    const Ad = '#DAA520'; // darker gold
+    const Ab = '#B8860B'; // bronze shadow
+    const Aj = '#00BFFF'; // jewel blue
+    this.tex('item-scepters', [
+      [_, Ad, _, _, Ad, _],
+      [Ad, Aj, Ad, Ad, Aj, Ad],
+      [_, Ad, Ag, Ag, Ad, _],
+      [_, _, Ag, Ag, _, _],
+      [_, _, Ad, Ad, _, _],
+      [_, _, Ab, Ab, _, _],
     ]);
   }
 }
