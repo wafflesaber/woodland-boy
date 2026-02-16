@@ -322,13 +322,21 @@ export default class MapGenerator {
       }
       if (tooClose) continue;
 
-      const canopyVariant = cfg.canopies[Math.floor(Math.random() * cfg.canopies.length)];
-
-      const trunk = this.scene.add.image(wx, wy + 8, cfg.trunk);
-      trunk.setDepth(wy + 8);
-
-      const canopy = this.scene.add.image(wx, wy - 16, canopyVariant);
-      canopy.setDepth(wy - 16 + 10000);
+      if (cfg.wholeTrees && cfg.wholeTrees.length > 0) {
+        // Single-sprite tree (canopy + trunk baked in)
+        const treeKey = cfg.wholeTrees[Math.floor(Math.random() * cfg.wholeTrees.length)];
+        const tree = this.scene.add.image(wx, wy, treeKey);
+        tree.setOrigin(0.5, 0.85); // anchor near bottom so trunk sits on ground
+        // High depth so canopy renders above entities walking behind
+        tree.setDepth(wy + 10000);
+      } else {
+        // Legacy two-sprite tree (trunk + canopy)
+        const canopyVariant = cfg.canopies[Math.floor(Math.random() * cfg.canopies.length)];
+        const trunk = this.scene.add.image(wx, wy + 8, cfg.trunk);
+        trunk.setDepth(wy + 8);
+        const canopy = this.scene.add.image(wx, wy - 16, canopyVariant);
+        canopy.setDepth(wy - 16 + 10000);
+      }
 
       const body = this.scene.add.zone(wx, wy + 12, 16, 16);
       this.obstacles.add(body);

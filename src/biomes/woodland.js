@@ -16,7 +16,7 @@ export default {
   },
 
   decorations: {
-    trees: { count: 80, minDist: 80, trunk: 'tree-trunk', canopies: ['tree-canopy-1', 'tree-canopy-2'] },
+    trees: { count: 80, minDist: 80, trunk: 'tree-trunk', canopies: ['tree-canopy-1', 'tree-canopy-2'], wholeTrees: ['tree-maple', 'tree-birch'] },
     bushes: { count: 40, berryChance: 0.3, plain: 'bush', berry: 'bush-berry' },
     rocks: { count: 20, texture: 'rock' },
     flowers: { count: 50, variants: ['flower-red', 'flower-yellow', 'flower-purple'] },

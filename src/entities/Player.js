@@ -8,12 +8,14 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
     scene.physics.add.existing(this);
 
     // Physics body — smaller than sprite for forgiving collisions
-    this.body.setSize(20, 20);
-    this.body.setOffset(6, 10);
+    // Texture is 64x64 (32x32 asset scaled 2x), character occupies center
+    this.body.setSize(24, 24);
+    this.body.setOffset(20, 32);
     this.setCollideWorldBounds(true);
 
     // Shadow
-    this.shadow = scene.add.image(x, y + 12, 'shadow');
+    this.shadow = scene.add.image(x, y + 20, 'shadow');
+    this.shadow.setScale(1.5);
     this.shadow.setAlpha(0.4);
     this.shadow.setDepth(0);
 
@@ -104,7 +106,7 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
   }
 
   updateShadow() {
-    this.shadow.setPosition(this.x, this.y + 12);
+    this.shadow.setPosition(this.x, this.y + 20);
     this.shadow.setDepth(this.y - 1);
   }
 }
