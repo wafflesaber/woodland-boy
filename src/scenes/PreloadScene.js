@@ -125,10 +125,43 @@ export default class PreloadScene extends Phaser.Scene {
       { frameWidth: 32, frameHeight: 48 });
     this.load.spritesheet('sheet-pine-tree', 'assets/decorations/pine-tree-anim.png',
       { frameWidth: 32, frameHeight: 48 });
+
+    // ── Pixel 16 Woods: terrain + decorations (whole images) ──
+    const woods = (key, file) => this.load.image(key, `assets/woods/${file}.png`);
+    // Terrain mapped onto the engine's expected keys (these were procedural before)
+    woods('terrain-grass-0', 'grass-light');
+    woods('terrain-grass-1', 'grass-light');
+    woods('terrain-grass-2', 'grass-light');
+    woods('terrain-water-0', 'water');
+    woods('terrain-water-1', 'water');
+    woods('terrain-water-2', 'water');
+    woods('terrain-dirt', 'dirt');
+    woods('terrain-sand', 'dirt');
+    // Decorations under woods- prefixed keys (referenced by woodland.js)
+    this.woodsDecorKeys = [
+      'tree-broadleaf-a', 'tree-broadleaf-b', 'tree-pine-tall', 'tree-pine-small',
+      'tree-medium', 'tree-old', 'bush-1', 'bush-2',
+      'flower-pink', 'flower-yellow', 'flower-blue', 'flower-white', 'flower-red',
+      'mushroom-red', 'mushroom-tan', 'stump', 'log',
+      'rock-small', 'rock-pebbles', 'rock-cluster', 'grass-tuft-1', 'grass-tuft-2',
+    ];
+    this.woodsDecorKeys.forEach(n => woods('woods-' + n, n));
+    // Whole terrain-feature stamps (rounded patches placed on the grass base)
+    this.woodsBlobKeys = ['dirt-blob', 'dirt-blob2', 'water-blob'];
+    this.woodsBlobKeys.forEach(n => woods(n, n));
+    this.woodsTerrainKeys = [
+      'terrain-grass-0', 'terrain-grass-1', 'terrain-grass-2',
+      'terrain-water-0', 'terrain-water-1', 'terrain-water-2',
+      'terrain-dirt', 'terrain-sand',
+    ];
   }
 
   create() {
     const reg = this.registry.get('assetRegistry');
+
+    // Register woods terrain + decoration textures so procedural fallback skips them
+    [...this.woodsTerrainKeys, ...this.woodsDecorKeys.map(n => 'woods-' + n), ...this.woodsBlobKeys]
+      .forEach(k => { if (this.textures.exists(k)) reg.markLoaded(k); });
 
     // Helper: extract a single frame from a spritesheet to a standalone texture
     const extract = (sheetKey, frameIndex, targetKey, scaleUp = 1) => {

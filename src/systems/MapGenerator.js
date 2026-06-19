@@ -149,6 +149,7 @@ export default class MapGenerator {
 
   generateOases() {
     const waterCells = new Set();
+    this.ponds = [];
     const pondCount = 2 + Math.floor(Math.random() * 2); // 2-3 ponds
 
     // Pick spread-out positions
@@ -172,6 +173,8 @@ export default class MapGenerator {
     for (const { col: cx, row: cy } of pondCenters) {
       const rx = 2 + Math.floor(Math.random() * 2); // radius 2-3
       const ry = 2 + Math.floor(Math.random() * 2);
+
+      this.ponds.push({ cx, cy, rx, ry });
 
       for (let r = cy - ry; r <= cy + ry; r++) {
         for (let c = cx - rx; c <= cx + rx; c++) {
@@ -228,48 +231,27 @@ export default class MapGenerator {
   layTerrain(waterCells, clearings, bridgeCells) {
     const t = this.biome.terrain;
 
-    // Sand bank cells (adjacent to water but not in water)
-    const bankCells = new Set();
-    for (const key of waterCells) {
-      const [col, row] = key.split(',').map(Number);
-      for (let dr = -1; dr <= 1; dr++) {
-        for (let dc = -1; dc <= 1; dc++) {
-          const nk = `${col + dc},${row + dr}`;
-          if (!waterCells.has(nk)) {
-            bankCells.add(nk);
-          }
-        }
-      }
-    }
-
+    // 1. Grass base on every cell (depth -3, under all features)
     for (let row = 0; row < this.rows; row++) {
       for (let col = 0; col < this.cols; col++) {
         const wx = col * TILE_SIZE + TILE_SIZE / 2;
         const wy = row * TILE_SIZE + TILE_SIZE / 2;
-        const key = `${col},${row}`;
-
-        let texKey;
-        if (bridgeCells.has(key)) {
-          texKey = 'terrain-bridge';
-        } else if (waterCells.has(key)) {
-          texKey = `terrain-${t.water}-${Math.floor(Math.random() * t.waterVariants)}`;
-        } else if (bankCells.has(key)) {
-          texKey = t.bankTile;
-        } else {
-          texKey = `${t.base}-${Math.floor(Math.random() * t.baseVariants)}`;
-        }
-
-        // For terrain tiles that are just a direct key (no variant suffix), use as-is
-        // For grass/sand patterns like 'desert-sand-0', they already include the variant
-        const tile = this.scene.add.image(wx, wy, texKey).setDepth(-1);
-
-        if (waterCells.has(key) && !bridgeCells.has(key)) {
-          this.waterTiles.push(tile);
-        }
+        const v = Math.floor(Math.random() * t.baseVariants);
+        this.scene.add.image(wx, wy, `${t.base}-${v}`).setDepth(-3);
       }
     }
 
-    // Water collision
+    // 2. Water ponds as rounded blob stamps over the elliptical pond cells
+    if (this.ponds) {
+      for (const p of this.ponds) {
+        const wx = p.cx * TILE_SIZE + TILE_SIZE / 2;
+        const wy = p.cy * TILE_SIZE + TILE_SIZE / 2;
+        const img = this.scene.add.image(wx, wy, 'water-blob').setDepth(-2.5);
+        img.setDisplaySize((p.rx * 2 + 2) * TILE_SIZE, (p.ry * 2 + 2) * TILE_SIZE);
+      }
+    }
+
+    // 3. Water collision (per-cell, unchanged)
     for (const key of waterCells) {
       if (bridgeCells.has(key)) continue;
       const [col, row] = key.split(',').map(Number);
@@ -281,16 +263,11 @@ export default class MapGenerator {
   }
 
   layClearing(clearings) {
-    const clearingTile = this.biome.terrain.clearingTile;
-    for (const c of clearings) {
-      for (let row = c.top; row <= c.bottom; row++) {
-        for (let col = c.left; col <= c.right; col++) {
-          const wx = col * TILE_SIZE + TILE_SIZE / 2;
-          const wy = row * TILE_SIZE + TILE_SIZE / 2;
-          this.scene.add.image(wx, wy, clearingTile).setDepth(-0.5);
-        }
-      }
-    }
+    // Each clearing is a rounded dirt patch stamped over its rectangle
+    clearings.forEach((c) => {
+      const img = this.scene.add.image(c.cx, c.cy, 'dirt-blob').setDepth(-2);
+      img.setDisplaySize(c.w * TILE_SIZE * 1.3, c.h * TILE_SIZE * 1.3);
+    });
   }
 
   // ─── Trees ───

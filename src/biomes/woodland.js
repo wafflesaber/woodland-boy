@@ -10,16 +10,16 @@ export default {
     baseVariants: 3,
     water: 'water',            // terrain-water-0..2
     waterVariants: 3,
-    waterType: 'river',        // 'river' or 'oasis'
+    waterType: 'oasis',        // 'river' or 'oasis' (ponds, stamped as blobs)
     clearingTile: 'terrain-dirt',
     bankTile: 'terrain-sand',
   },
 
   decorations: {
-    trees: { count: 80, minDist: 80, trunk: 'tree-trunk', canopies: ['tree-canopy-1', 'tree-canopy-2'], wholeTrees: ['tree-maple', 'tree-birch'] },
-    bushes: { count: 40, berryChance: 0.3, plain: 'bush', berry: 'bush-berry' },
-    rocks: { count: 20, texture: 'rock' },
-    flowers: { count: 50, variants: ['flower-red', 'flower-yellow', 'flower-purple'] },
+    trees: { count: 80, minDist: 100, wholeTrees: ['woods-tree-broadleaf-a', 'woods-tree-broadleaf-b', 'woods-tree-medium', 'woods-tree-pine-tall', 'woods-tree-pine-small', 'woods-tree-old'] },
+    bushes: { count: 40, berryChance: 0.3, plain: 'woods-bush-1', berry: 'woods-bush-2' },
+    rocks: { count: 20, texture: 'woods-rock-cluster' },
+    flowers: { count: 60, variants: ['woods-flower-pink', 'woods-flower-yellow', 'woods-flower-blue', 'woods-flower-white', 'woods-flower-red', 'woods-mushroom-red', 'woods-grass-tuft-1', 'woods-grass-tuft-2'] },
   },
 
   animals: {
